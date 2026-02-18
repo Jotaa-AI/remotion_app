@@ -680,7 +680,11 @@ app.get('*', (_, res) => {
   res.sendFile(path.join(config.rootDir, 'public', 'index.html'));
 });
 
-app.listen(config.port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Smart Overlay MVP escuchando en ${config.baseUrl}`);
-});
+export default app;
+
+if (!config.isVercel) {
+  app.listen(config.port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`Smart Overlay MVP escuchando en ${config.baseUrl}`);
+  });
+}

@@ -1275,23 +1275,60 @@ const stopPolling = () => {
 };
 
 const fetchJson = async (url, options = {}) => {
-  const res = await fetch(url, options);
+  let res = null;
+  try {
+    res = await fetch(url, options);
+  } catch (error) {
+    const message = `No se pudo conectar con el backend (${error.message}).`;
+    const wrapped = new Error(message);
+    wrapped.cause = error;
+    throw wrapped;
+  }
+
+  const resTextClone = res.clone();
   let payload = null;
+  let rawText = '';
 
   try {
     payload = await res.json();
   } catch {
     payload = null;
+    try {
+      rawText = await resTextClone.text();
+    } catch {
+      rawText = '';
+    }
   }
 
   if (!res.ok) {
-    const message = payload?.error || 'La solicitud fallo.';
+    const isApiRoute = typeof url === 'string' && url.startsWith('/api/');
+    const notFoundStaticPage = /not_found|page could not be found/i.test(rawText);
+    let message = payload?.error || '';
+
+    if (!message && isApiRoute && res.status === 404 && notFoundStaticPage) {
+      message =
+        'Este despliegue no tiene backend API. En Vercel debes desplegar tambien el servidor (no solo /public).';
+    }
+
+    if (!message) {
+      message = `La solicitud fallo (HTTP ${res.status}).`;
+    }
+
     const error = new Error(message);
+    error.status = res.status;
     error.payload = payload;
     throw error;
   }
 
   return payload;
+};
+
+const checkBackendAvailability = async () => {
+  try {
+    await fetchJson('/api/health');
+  } catch (error) {
+    pipelineError.textContent = `Error: ${error.message}`;
+  }
 };
 
 const startPolling = (jobId) => {
@@ -1545,3 +1582,4 @@ renderBtn.addEventListener('click', async () => {
 });
 
 resetWorkspace();
+checkBackendAvailability();

@@ -38,6 +38,26 @@ npm run dev
 
 Abrir: `http://localhost:8787`
 
+## Despliegue en Vercel
+
+Este repo incluye `vercel.json` para desplegar **frontend + backend Express** en el mismo proyecto.
+
+Pasos recomendados:
+
+1. Importa el repo en Vercel.
+2. No definas `Output Directory` (deja que use `server/index.js`).
+3. Configura variables de entorno (`OPENAI_API_KEY`, `BASE_URL` con tu dominio Vercel).
+4. Redeploy.
+
+Verificación rápida:
+
+- `GET /api/health` debe responder `200` con JSON.
+- Si `/api/health` da `404 NOT_FOUND`, se desplegó solo estático y el pipeline se quedará bloqueado en validación.
+
+Nota de operación:
+
+- El MVP usa cola en memoria y escritura local. En serverless puede funcionar para pruebas, pero para producción necesitas storage/queue externos (S3/R2 + Redis/DB + workers).
+
 ## Flujo API
 
 - `POST /api/jobs`
