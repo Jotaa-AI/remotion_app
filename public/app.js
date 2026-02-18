@@ -187,6 +187,7 @@ const STAGE_TO_PHASE = {
   transcription: 'transcription',
   'insight-extraction': 'semantic_analysis',
   'planning-overlays': 'overlay_planning',
+  'planning-scenes': 'overlay_planning',
   'review-ready': 'review',
   'refining-overlays': 'review',
   'render-queued': 'render_queue',
@@ -224,6 +225,10 @@ const STAGE_COPY = {
   'planning-overlays': {
     action: 'Proponiendo animaciones',
     description: 'Construyendo la propuesta visual inicial por momentos clave.',
+  },
+  'planning-scenes': {
+    action: 'Planificando escenas personalizadas',
+    description: 'Generando scene graph nativo para render sin plantillas cerradas.',
   },
   'review-ready': {
     action: 'Esperando tu revisión',
@@ -263,6 +268,7 @@ const PHASE_LOCAL_PROGRESS = {
   transcription: 0.74,
   'insight-extraction': 0.76,
   'planning-overlays': 0.82,
+  'planning-scenes': 0.9,
   'review-ready': 1,
   'refining-overlays': 0.56,
   'render-queued': 0.46,

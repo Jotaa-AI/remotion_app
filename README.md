@@ -114,6 +114,7 @@ Clave:
 Se añadió una base V2 para evolucionar a animaciones personalizadas:
 
 - Schema de escenas/capas: `server-v2/scene-schema.js`
+- Planner nativo de escenas: `server-v2/plan-scenes.js`
 - Compiler seguro (validación + normalización): `server-v2/scene-compiler.js`
 - Renderer por primitivas: `remotion/primitives/PrimitiveRenderer.jsx`
 - Nueva composición Remotion: `SceneGraphOverlay` (`remotion/SceneGraphComposition.jsx`)

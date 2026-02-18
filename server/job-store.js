@@ -51,6 +51,7 @@ export const createJob = ({file, sourceUrl, sourceType, brief}) => {
     transcript: null,
     analysisInsights: [],
     overlayPlan: null,
+    scenePlan: null,
     refinementHistory: [],
     error: null,
   };

@@ -8,6 +8,7 @@ import {planOverlayEvents} from './plan-overlays.js';
 import {normalizeEvents} from './normalize-events.js';
 import {renderCompositedVideo} from './remotion-render.js';
 import {downloadYoutubeVideo} from './video-ingest.js';
+import {planSceneGraph} from '../server-v2/plan-scenes.js';
 
 const queue = [];
 let isProcessing = false;
@@ -142,10 +143,25 @@ const analyzeJob = async (jobId) => {
   });
 
   updateJob(jobId, {
+    status: 'analyzing',
+    stage: 'planning-scenes',
+    progress: 88,
+    overlayPlan: normalizedEvents,
+  });
+
+  const scenePlan = await planSceneGraph({
+    brief: job.brief,
+    transcriptText: transcript.text,
+    durationSec: metadata.durationSec,
+    analysisInsights: insights.insights,
+  });
+
+  updateJob(jobId, {
     status: 'review',
     stage: 'review-ready',
     progress: 100,
     overlayPlan: normalizedEvents,
+    scenePlan: scenePlan.scenes,
     error: null,
   });
 };
@@ -156,8 +172,15 @@ const renderJob = async (jobId) => {
     return;
   }
 
-  if (!job.overlayPlan || job.overlayPlan.length === 0) {
-    throw new Error('No existe un plan de overlays para renderizar. Primero analiza y revisa la propuesta.');
+  const hasOverlayPlan = Array.isArray(job.overlayPlan) && job.overlayPlan.length > 0;
+  const hasScenePlan = Array.isArray(job.scenePlan) && job.scenePlan.length > 0;
+
+  if (config.useSceneGraph ? !hasScenePlan : !hasOverlayPlan) {
+    throw new Error(
+      config.useSceneGraph
+        ? 'No existe un plan de escenas para renderizar. Primero analiza y revisa la propuesta.'
+        : 'No existe un plan de overlays para renderizar. Primero analiza y revisa la propuesta.',
+    );
   }
 
   updateJob(jobId, {
@@ -189,6 +212,7 @@ const renderJob = async (jobId) => {
     height: metadata.height,
     durationSec: metadata.durationSec,
     events: job.overlayPlan,
+    scenes: job.scenePlan,
     onRenderProgress: (progress) => {
       if (!Number.isFinite(progress)) {
         return;

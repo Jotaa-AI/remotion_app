@@ -316,6 +316,7 @@ const serializeJob = (job) => {
       : null,
     analysisInsights: job.analysisInsights || [],
     overlayPlan: job.overlayPlan,
+    scenePlan: job.scenePlan || [],
     refinementHistory: job.refinementHistory || [],
     output: job.output,
     visualToolkit: REMOTION_VISUAL_TOOLKIT,
@@ -646,7 +647,10 @@ app.post('/api/jobs/:id/render', (req, res) => {
     return;
   }
 
-  if (!job.overlayPlan || !job.video || !job.transcript) {
+  const hasOverlayPlan = Array.isArray(job.overlayPlan) && job.overlayPlan.length > 0;
+  const hasScenePlan = Array.isArray(job.scenePlan) && job.scenePlan.length > 0;
+
+  if (!(hasOverlayPlan || hasScenePlan) || !job.video || !job.transcript) {
     res.status(409).json({error: 'Primero debes completar el análisis y revisar la propuesta.'});
     return;
   }
