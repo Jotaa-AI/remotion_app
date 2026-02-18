@@ -1,0 +1,25 @@
+{
+  "name": "smart-overlay-mvp",
+  "version": "0.1.0",
+  "description": "MVP de Smart Overlay Engine: sube video, describe animaciones y genera un video listo para YouTube.",
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js",
+    "dev:watch": "node --watch server/index.js",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.332",
+    "@remotion/renderer": "^4.0.332",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1",
+    "openai": "^4.70.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.332",
+    "uuid": "^10.0.0",
+    "zod": "^3.23.8"
+  }
+}
