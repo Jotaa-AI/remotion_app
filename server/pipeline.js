@@ -9,6 +9,7 @@ import {normalizeEvents} from './normalize-events.js';
 import {renderCompositedVideo} from './remotion-render.js';
 import {downloadYoutubeVideo} from './video-ingest.js';
 import {planSceneGraph} from '../server-v2/plan-scenes.js';
+import {validateAndOptimizeScenes} from '../server-v2/scene-quality.js';
 
 const queue = [];
 let isProcessing = false;
@@ -156,12 +157,20 @@ const analyzeJob = async (jobId) => {
     analysisInsights: insights.insights,
   });
 
+  const optimized = validateAndOptimizeScenes({
+    scenePlan: scenePlan.scenes,
+    durationSec: metadata.durationSec,
+    fallbackEvents: normalizedEvents,
+  });
+
   updateJob(jobId, {
     status: 'review',
     stage: 'review-ready',
     progress: 100,
     overlayPlan: normalizedEvents,
-    scenePlan: scenePlan.scenes,
+    scenePlan: optimized.scenes,
+    sceneQuality: optimized.quality,
+    warnings: optimized.quality?.warnings || [],
     error: null,
   });
 };

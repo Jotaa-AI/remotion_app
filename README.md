@@ -140,6 +140,8 @@ Se añadió una base V2 para evolucionar a animaciones personalizadas:
 - Nueva composición Remotion: `SceneGraphOverlay` (`remotion/SceneGraphComposition.jsx`)
 - Documento técnico: `docs/ARCHITECTURE_V2.md`
 - Guía de motion: `docs/MOTION_SYSTEM_V1.md`
+- Quality guardrails SceneGraph: `server-v2/scene-quality.js`
+- Documento de calidad: `docs/SCENE_QUALITY_V1.md`
 
 Esta base permite pasar de `template + payload` a `scenes + layers + animación` con guardrails.
 

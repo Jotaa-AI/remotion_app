@@ -317,6 +317,7 @@ const serializeJob = (job) => {
     analysisInsights: job.analysisInsights || [],
     overlayPlan: job.overlayPlan,
     scenePlan: job.scenePlan || [],
+    sceneQuality: job.sceneQuality || null,
     refinementHistory: job.refinementHistory || [],
     output: job.output,
     visualToolkit: REMOTION_VISUAL_TOOLKIT,
