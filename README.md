@@ -120,3 +120,11 @@ Se añadió una base V2 para evolucionar a animaciones personalizadas:
 - Documento técnico: `docs/ARCHITECTURE_V2.md`
 
 Esta base permite pasar de `template + payload` a `scenes + layers + animación` con guardrails.
+
+Para probar el render V2 por feature flag:
+
+```bash
+USE_SCENE_GRAPH=true npm run dev
+```
+
+Si no activas el flag, el sistema sigue renderizando con `SmartOverlay` (modo actual).

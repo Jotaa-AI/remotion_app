@@ -24,4 +24,5 @@ export const config = {
   rendersDir: path.join(ROOT_DIR, 'data', 'renders'),
   jobsDir: path.join(ROOT_DIR, 'data', 'jobs'),
   remotionEntry: path.join(ROOT_DIR, 'remotion', 'index.jsx'),
+  useSceneGraph: String(process.env.USE_SCENE_GRAPH || 'false').toLowerCase() === 'true',
 };

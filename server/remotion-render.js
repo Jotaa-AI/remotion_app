@@ -2,6 +2,8 @@ import path from 'path';
 import {bundle} from '@remotion/bundler';
 import {renderMedia, selectComposition} from '@remotion/renderer';
 import {config} from './config.js';
+import {eventsToScenes} from '../server-v2/event-to-scene.js';
+import {compileScenePlan} from '../server-v2/scene-compiler.js';
 
 let bundleLocationPromise;
 
@@ -22,22 +24,45 @@ export const renderCompositedVideo = async ({
   height,
   durationSec,
   events,
+  scenes,
   onRenderProgress,
 }) => {
   const serveUrl = await getBundleLocation();
 
-  const inputProps = {
+  const durationInFrames = Math.max(1, Math.ceil(durationSec * config.fps));
+  const useSceneGraph = config.useSceneGraph === true;
+
+  let compositionId = 'SmartOverlay';
+  let inputProps = {
     videoUrl,
     events,
     width,
     height,
     fps: config.fps,
-    durationInFrames: Math.max(1, Math.ceil(durationSec * config.fps)),
+    durationInFrames,
   };
+
+  if (useSceneGraph) {
+    const baseScenes = Array.isArray(scenes) && scenes.length > 0 ? scenes : eventsToScenes({events: events || []});
+    const compiled = compileScenePlan({
+      plan: {scenes: baseScenes},
+      durationSec,
+    });
+
+    compositionId = 'SceneGraphOverlay';
+    inputProps = {
+      videoUrl,
+      scenes: compiled.scenes,
+      width,
+      height,
+      fps: config.fps,
+      durationInFrames,
+    };
+  }
 
   const composition = await selectComposition({
     serveUrl,
-    id: 'SmartOverlay',
+    id: compositionId,
     inputProps,
   });
 
