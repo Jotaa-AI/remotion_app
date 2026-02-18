@@ -73,6 +73,8 @@ const heuristicScenes = ({durationSec, analysisInsights}) => {
                 shadow: true,
               },
               enter: {kind: 'pop', fromSec: 0, durationSec: 0.45, easing: 'spring'},
+              loop: {kind: 'scale', fromSec: 0.5, durationSec: 1, easing: 'linear', params: {hz: 0.9, amp: 0.015}},
+              exit: {kind: 'fade', fromSec: 0, durationSec: 0.3, easing: 'ease-in'},
             },
           ],
         },
@@ -129,6 +131,8 @@ const heuristicScenes = ({durationSec, analysisInsights}) => {
             shadow: true,
           },
           enter: {kind: 'pop', fromSec: 0, durationSec: 0.45, easing: 'spring'},
+          loop: {kind: 'scale', fromSec: 0.4, durationSec: 1, easing: 'linear', params: {hz: 1.1, amp: 0.02}},
+          exit: {kind: 'fade', fromSec: 0, durationSec: 0.3, easing: 'ease-in'},
         },
         ...(subtitle
           ? [
@@ -150,6 +154,8 @@ const heuristicScenes = ({durationSec, analysisInsights}) => {
                   shadow: false,
                 },
                 enter: {kind: 'fade', fromSec: 0.1, durationSec: 0.35, easing: 'ease-out'},
+                loop: {kind: 'scale', fromSec: 0.5, durationSec: 1, easing: 'linear', params: {hz: 0.8, amp: 0.01}},
+                exit: {kind: 'fade', fromSec: 0, durationSec: 0.25, easing: 'ease-in'},
               },
             ]
           : []),

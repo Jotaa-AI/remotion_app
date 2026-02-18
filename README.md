@@ -119,6 +119,7 @@ Se añadió una base V2 para evolucionar a animaciones personalizadas:
 - Renderer por primitivas: `remotion/primitives/PrimitiveRenderer.jsx`
 - Nueva composición Remotion: `SceneGraphOverlay` (`remotion/SceneGraphComposition.jsx`)
 - Documento técnico: `docs/ARCHITECTURE_V2.md`
+- Guía de motion: `docs/MOTION_SYSTEM_V1.md`
 
 Esta base permite pasar de `template + payload` a `scenes + layers + animación` con guardrails.
 
