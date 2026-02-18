@@ -106,3 +106,17 @@ Clave:
 - Migrar jobs a cola persistente (Redis)
 - Añadir validación humana rápida del plan antes de render
 - Integrar ingest por URL (YouTube/Loom) en un worker separado
+
+---
+
+## V2 (sin plantillas cerradas): Scene Graph Engine
+
+Se añadió una base V2 para evolucionar a animaciones personalizadas:
+
+- Schema de escenas/capas: `server-v2/scene-schema.js`
+- Compiler seguro (validación + normalización): `server-v2/scene-compiler.js`
+- Renderer por primitivas: `remotion/primitives/PrimitiveRenderer.jsx`
+- Nueva composición Remotion: `SceneGraphOverlay` (`remotion/SceneGraphComposition.jsx`)
+- Documento técnico: `docs/ARCHITECTURE_V2.md`
+
+Esta base permite pasar de `template + payload` a `scenes + layers + animación` con guardrails.
