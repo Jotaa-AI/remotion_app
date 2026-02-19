@@ -20,21 +20,45 @@ const ensureInputReady = async (jobId, job) => {
   }
 
   if ((job.input?.sourceType === 'youtube' || job.input?.sourceType === 'blob') && job.input?.sourceUrl) {
+    // Para Blob en cloud, evitamos descargar de nuevo para no bloquear en serverless.
+    if (job.input.sourceType === 'blob') {
+      const filenameFromUrl = (() => {
+        try {
+          const parsed = new URL(job.input.sourceUrl);
+          return decodeURIComponent(parsed.pathname.split('/').pop() || `blob-${jobId}.mp4`);
+        } catch {
+          return `blob-${jobId}.mp4`;
+        }
+      })();
+
+      const input = {
+        ...job.input,
+        filename: filenameFromUrl,
+        originalname: filenameFromUrl,
+        mimetype: job.input.mimetype || 'video/mp4',
+        size: job.input.size || null,
+        path: job.input.sourceUrl,
+        isRemote: true,
+      };
+
+      updateJob(jobId, {
+        stage: 'input-download',
+        progress: 6,
+        input,
+      });
+
+      return input;
+    }
+
     updateJob(jobId, {
       stage: 'input-download',
       progress: 6,
     });
 
-    const downloaded =
-      job.input.sourceType === 'youtube'
-        ? await downloadYoutubeVideo({
-            jobId,
-            youtubeUrl: job.input.sourceUrl,
-          })
-        : await downloadRemoteVideo({
-            jobId,
-            sourceUrl: job.input.sourceUrl,
-          });
+    const downloaded = await downloadYoutubeVideo({
+      jobId,
+      youtubeUrl: job.input.sourceUrl,
+    });
 
     const input = {
       ...job.input,
@@ -225,8 +249,11 @@ const renderJob = async (jobId) => {
 
   const metadata = await ensureMetadata(jobId, job);
 
-  const encodedFilename = encodeURIComponent(resolvedInput.filename);
-  const videoUrl = `${config.baseUrl}/media/${encodedFilename}`;
+  const encodedFilename = encodeURIComponent(resolvedInput.filename || 'video.mp4');
+  const videoUrl =
+    resolvedInput.sourceType === 'blob' && resolvedInput.sourceUrl
+      ? resolvedInput.sourceUrl
+      : `${config.baseUrl}/media/${encodedFilename}`;
 
   const outputPath = await renderCompositedVideo({
     jobId,
