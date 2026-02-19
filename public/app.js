@@ -1352,6 +1352,39 @@ const fetchJson = async (url, options = {}) => {
   return payload;
 };
 
+const uploadToVercelBlob = async (file) => {
+  const loadModule = async () => {
+    try {
+      return await import('https://esm.sh/@vercel/blob/client?bundle');
+    } catch {
+      return await import('https://cdn.jsdelivr.net/npm/@vercel/blob/+esm');
+    }
+  };
+
+  const withTimeout = (promise, ms) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('La subida está tardando demasiado.')), ms);
+      }),
+    ]);
+  };
+
+  const mod = await withTimeout(loadModule(), 12000);
+  const {upload} = mod;
+
+  const safeName = String(file?.name || 'video.mp4').replace(/\s+/g, '-').toLowerCase();
+  const pathname = `${Date.now()}-${safeName}`;
+
+  return await withTimeout(
+    upload(pathname, file, {
+      access: 'public',
+      handleUploadUrl: '/api/blob/upload',
+    }),
+    120000,
+  );
+};
+
 const checkBackendAvailability = async () => {
   try {
     await fetchJson('/api/health');
@@ -1433,23 +1466,59 @@ form.addEventListener('submit', async (event) => {
   });
 
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Analizando...';
-
-  const formData = new FormData(form);
-  if (youtubeUrl) {
-    formData.set('youtubeUrl', youtubeUrl);
-  }
+  submitBtn.textContent = hasFile ? 'Subiendo video...' : 'Analizando...';
 
   try {
-    const payload = await fetchJson('/api/jobs', {
-      method: 'POST',
-      body: formData,
-    });
+    let payload = null;
+
+    if (hasFile) {
+      const file = fileInput.files[0];
+
+      // Ruta estable para cloud: subir primero a Vercel Blob (evita 413 por body grande).
+      try {
+        const blob = await uploadToVercelBlob(file);
+
+        payload = await fetchJson('/api/jobs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({blobUrl: blob.url}),
+        });
+      } catch (blobError) {
+        // Solo hacemos fallback a multipart directo si estamos en runtime local.
+        if (!isLocalRuntime) {
+          throw blobError;
+        }
+
+        const formData = new FormData();
+        formData.set('video', file);
+
+        payload = await fetchJson('/api/jobs', {
+          method: 'POST',
+          body: formData,
+        });
+      }
+    } else {
+      const formData = new FormData();
+      if (youtubeUrl) {
+        formData.set('youtubeUrl', youtubeUrl);
+      }
+
+      payload = await fetchJson('/api/jobs', {
+        method: 'POST',
+        body: formData,
+      });
+    }
 
     currentJobId = payload.jobId;
     startPolling(payload.jobId);
   } catch (error) {
-    pipelineError.textContent = `Error: ${error.message}`;
+    const raw = String(error?.message || '');
+    const likelyWebview = /too long|tardando demasiado|import|network|failed to fetch/i.test(raw);
+    pipelineError.textContent = likelyWebview
+      ? 'Error: No se pudo completar la subida en este visor. Abre el enlace en Safari/Chrome e inténtalo de nuevo.'
+      : `Error: ${raw}`;
     submitBtn.disabled = false;
   } finally {
     submitBtn.textContent = 'Analizar y proponer animaciones';
