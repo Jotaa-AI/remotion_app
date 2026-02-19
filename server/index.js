@@ -9,7 +9,8 @@ import {createJob, getJob, updateJob} from './job-store.js';
 import {enqueueAnalysis, enqueueRender} from './pipeline.js';
 import {applyOverlayToolkitDefaults, refineOverlayEvents, REMOTION_VISUAL_TOOLKIT} from './plan-overlays.js';
 import {normalizeEvents} from './normalize-events.js';
-import {isYoutubeUrl} from './video-ingest.js';
+import {handleUpload} from '@vercel/blob/client';
+import {isSupportedRemoteVideoUrl, isYoutubeUrl} from './video-ingest.js';
 
 const app = express();
 
@@ -291,10 +292,15 @@ const serializeJob = (job) => {
           type: 'youtube',
           label: job.input?.sourceUrl || 'YouTube',
         }
-      : {
-          type: 'upload',
-          label: job.input?.originalname || 'Archivo local',
-        };
+      : job.input?.sourceType === 'blob'
+        ? {
+            type: 'blob',
+            label: job.input?.sourceUrl || 'Vercel Blob',
+          }
+        : {
+            type: 'upload',
+            label: job.input?.originalname || 'Archivo local',
+          };
 
   return {
     id: job.id,
@@ -336,13 +342,38 @@ app.get('/api/health', (_, res) => {
   });
 });
 
+app.post('/api/blob/upload', async (req, res) => {
+  try {
+    const jsonResponse = await handleUpload({
+      body: req.body,
+      request: req,
+      onBeforeGenerateToken: async () => {
+        return {
+          allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-matroska'],
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({source: 'smart-overlay-studio'}),
+        };
+      },
+      onUploadCompleted: async () => {
+        return;
+      },
+    });
+
+    res.status(200).json(jsonResponse);
+  } catch (error) {
+    res.status(400).json({error: error.message || 'No se pudo preparar la subida a Blob.'});
+  }
+});
+
 app.post('/api/jobs', upload.single('video'), (req, res) => {
   const youtubeUrl = toStringOrNull(req.body?.youtubeUrl);
+  const blobUrl = toStringOrNull(req.body?.blobUrl);
   const hasFile = Boolean(req.file);
   const hasYoutube = Boolean(youtubeUrl);
+  const hasBlob = Boolean(blobUrl);
 
-  if (!hasFile && !hasYoutube) {
-    res.status(400).json({error: 'Debes subir un video local o pegar un enlace de YouTube.'});
+  if (!hasFile && !hasYoutube && !hasBlob) {
+    res.status(400).json({error: 'Debes subir un video local, pegar YouTube o enviar blobUrl.'});
     return;
   }
 
@@ -351,11 +382,16 @@ app.post('/api/jobs', upload.single('video'), (req, res) => {
     return;
   }
 
+  if (!hasFile && hasBlob && !isSupportedRemoteVideoUrl(blobUrl)) {
+    res.status(400).json({error: 'El blobUrl no es válido o no está permitido.'});
+    return;
+  }
+
   const job = hasFile
     ? createJob({file: req.file})
     : createJob({
-        sourceUrl: youtubeUrl,
-        sourceType: 'youtube',
+        sourceUrl: hasBlob ? blobUrl : youtubeUrl,
+        sourceType: hasBlob ? 'blob' : 'youtube',
       });
   enqueueAnalysis(job.id);
 

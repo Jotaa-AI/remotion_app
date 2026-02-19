@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import {Readable} from 'stream';
 import {config} from './config.js';
 import {runCommand} from './shell.js';
 
@@ -10,6 +11,8 @@ const YOUTUBE_HOSTS = new Set([
   'youtu.be',
   'www.youtu.be',
 ]);
+
+const BLOB_HOST_SUFFIXES = ['.public.blob.vercel-storage.com'];
 
 const toUrl = (value) => {
   try {
@@ -32,6 +35,17 @@ export const isYoutubeUrl = (value) => {
     return true;
   }
   return host.endsWith('.youtube.com');
+};
+
+export const isSupportedRemoteVideoUrl = (value) => {
+  const parsed = toUrl(value);
+  if (!parsed) return false;
+  if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+
+  const host = parsed.hostname.toLowerCase();
+  if (isYoutubeUrl(value)) return true;
+  if (BLOB_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix))) return true;
+  return false;
 };
 
 const findDownloadedFile = (prefix) => {
@@ -89,5 +103,40 @@ export const downloadYoutubeVideo = async ({jobId, youtubeUrl}) => {
     mimetype: 'video/mp4',
     size: stats.size,
     path: downloaded.fullPath,
+  };
+};
+
+export const downloadRemoteVideo = async ({jobId, sourceUrl}) => {
+  const parsed = toUrl(sourceUrl);
+  if (!parsed) {
+    throw new Error('URL remota inválida.');
+  }
+
+  const extFromPath = path.extname(parsed.pathname || '').toLowerCase();
+  const ext = ['.mp4', '.mov', '.webm', '.mkv'].includes(extFromPath) ? extFromPath : '.mp4';
+  const filename = `remote-${jobId}-${Date.now()}${ext}`;
+  const fullPath = path.join(config.uploadsDir, filename);
+
+  const response = await fetch(parsed.toString());
+  if (!response.ok || !response.body) {
+    throw new Error(`No se pudo descargar el video remoto (HTTP ${response.status}).`);
+  }
+
+  const stream = fs.createWriteStream(fullPath);
+  await new Promise((resolve, reject) => {
+    const nodeReadable = Readable.fromWeb(response.body);
+    nodeReadable.pipe(stream);
+    nodeReadable.on('error', reject);
+    stream.on('finish', resolve);
+    stream.on('error', reject);
+  });
+
+  const stats = fs.statSync(fullPath);
+  return {
+    filename,
+    originalname: filename,
+    mimetype: response.headers.get('content-type') || 'video/mp4',
+    size: stats.size,
+    path: fullPath,
   };
 };

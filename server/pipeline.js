@@ -7,7 +7,7 @@ import {buildExhaustiveAnalysisInsights} from './exhaustive-analysis.js';
 import {planOverlayEvents} from './plan-overlays.js';
 import {normalizeEvents} from './normalize-events.js';
 import {renderCompositedVideo} from './remotion-render.js';
-import {downloadYoutubeVideo} from './video-ingest.js';
+import {downloadRemoteVideo, downloadYoutubeVideo} from './video-ingest.js';
 import {planSceneGraph} from '../server-v2/plan-scenes.js';
 import {validateAndOptimizeScenes} from '../server-v2/scene-quality.js';
 
@@ -19,21 +19,27 @@ const ensureInputReady = async (jobId, job) => {
     return job.input;
   }
 
-  if (job.input?.sourceType === 'youtube' && job.input?.sourceUrl) {
+  if ((job.input?.sourceType === 'youtube' || job.input?.sourceType === 'blob') && job.input?.sourceUrl) {
     updateJob(jobId, {
       stage: 'input-download',
       progress: 6,
     });
 
-    const downloaded = await downloadYoutubeVideo({
-      jobId,
-      youtubeUrl: job.input.sourceUrl,
-    });
+    const downloaded =
+      job.input.sourceType === 'youtube'
+        ? await downloadYoutubeVideo({
+            jobId,
+            youtubeUrl: job.input.sourceUrl,
+          })
+        : await downloadRemoteVideo({
+            jobId,
+            sourceUrl: job.input.sourceUrl,
+          });
 
     const input = {
       ...job.input,
       ...downloaded,
-      sourceType: 'youtube',
+      sourceType: job.input.sourceType,
     };
 
     updateJob(jobId, {input});

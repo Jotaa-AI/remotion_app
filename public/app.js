@@ -1323,6 +1323,21 @@ const fetchJson = async (url, options = {}) => {
   return payload;
 };
 
+const uploadToVercelBlob = async (file) => {
+  const mod = await import('https://esm.sh/@vercel/blob/client');
+  const {upload} = mod;
+
+  const safeName = String(file?.name || 'video.mp4').replace(/\s+/g, '-').toLowerCase();
+  const pathname = `${Date.now()}-${safeName}`;
+
+  const blob = await upload(pathname, file, {
+    access: 'public',
+    handleUploadUrl: '/api/blob/upload',
+  });
+
+  return blob;
+};
+
 const checkBackendAvailability = async () => {
   try {
     await fetchJson('/api/health');
@@ -1387,7 +1402,7 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  const tempSourceType = hasFile ? 'upload' : 'youtube';
+  const tempSourceType = hasFile ? 'blob' : 'youtube';
   renderPipeline({
     status: 'queued',
     stage: 'analyze-queued',
@@ -1398,18 +1413,31 @@ form.addEventListener('submit', async (event) => {
   });
 
   submitBtn.disabled = true;
-  submitBtn.textContent = 'Analizando...';
-
-  const formData = new FormData(form);
-  if (youtubeUrl) {
-    formData.set('youtubeUrl', youtubeUrl);
-  }
+  submitBtn.textContent = hasFile ? 'Subiendo video...' : 'Analizando...';
 
   try {
-    const payload = await fetchJson('/api/jobs', {
-      method: 'POST',
-      body: formData,
-    });
+    let payload = null;
+
+    if (hasFile) {
+      const file = fileInput.files[0];
+      const blob = await uploadToVercelBlob(file);
+
+      payload = await fetchJson('/api/jobs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({blobUrl: blob.url}),
+      });
+    } else {
+      const formData = new FormData();
+      formData.set('youtubeUrl', youtubeUrl);
+
+      payload = await fetchJson('/api/jobs', {
+        method: 'POST',
+        body: formData,
+      });
+    }
 
     currentJobId = payload.jobId;
     startPolling(payload.jobId);
