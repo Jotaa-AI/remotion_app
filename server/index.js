@@ -11,6 +11,7 @@ import {applyOverlayToolkitDefaults, refineOverlayEvents, REMOTION_VISUAL_TOOLKI
 import {normalizeEvents} from './normalize-events.js';
 import {handleUpload} from '@vercel/blob/client';
 import {isSupportedRemoteVideoUrl, isYoutubeUrl} from './video-ingest.js';
+import {eventsToScenes} from '../server-v2/event-to-scene.js';
 
 const app = express();
 
@@ -325,6 +326,17 @@ const serializeJob = (job) => {
     scenePlan: job.scenePlan || [],
     sceneQuality: job.sceneQuality || null,
     refinementHistory: job.refinementHistory || [],
+    reviewState: job.reviewState || {
+      mode: 'sequential',
+      currentIndex: 0,
+      approvedIds: [],
+      rejectedIds: [],
+      completed: false,
+    },
+    currentOverlay:
+      Array.isArray(job.overlayPlan) && job.overlayPlan.length > 0
+        ? job.overlayPlan[Math.max(0, Math.min((job.reviewState?.currentIndex || 0), job.overlayPlan.length - 1))]
+        : null,
     output: job.output,
     visualToolkit: REMOTION_VISUAL_TOOLKIT,
   };
@@ -428,31 +440,43 @@ app.post('/api/jobs/:id/refine', async (req, res) => {
   });
 
   try {
+    const currentIndex = Math.max(0, Math.min(job.reviewState?.currentIndex || 0, job.overlayPlan.length - 1));
+    const targetEvent = job.overlayPlan[currentIndex];
+
     const refined = await refineOverlayEvents({
       brief: job.brief,
       transcriptText: job.transcript.text,
       words: job.transcript.words,
       durationSec: job.video.durationSec,
-      currentEvents: job.overlayPlan,
+      currentEvents: targetEvent ? [targetEvent] : [],
       instruction,
     });
 
-    const normalizedEvents = normalizeEvents({
-      events: refined.events,
+    const refinedCurrent = normalizeEvents({
+      events: Array.isArray(refined.events) ? refined.events.slice(0, 1) : [],
       durationSec: job.video.durationSec,
-    });
+    })[0];
+
+    const nextOverlayPlan = [...job.overlayPlan];
+    if (refinedCurrent) {
+      nextOverlayPlan[currentIndex] = {
+        ...refinedCurrent,
+        id: targetEvent?.id || refinedCurrent.id,
+      };
+    }
 
     const refreshed = getJob(job.id);
     const updated = updateJob(job.id, {
       status: 'review',
       stage: 'review-ready',
-      overlayPlan: normalizedEvents,
+      overlayPlan: nextOverlayPlan,
       refinementHistory: [
         ...(refreshed?.refinementHistory || []),
         {
           at: new Date().toISOString(),
           instruction,
-          overlays: normalizedEvents.length,
+          overlays: nextOverlayPlan.length,
+          targetIndex: currentIndex,
         },
       ],
     });
@@ -677,6 +701,65 @@ app.post('/api/jobs/:id/visual-overrides', (req, res) => {
   res.json(serializeJob(updated));
 });
 
+app.post('/api/jobs/:id/review/advance', (req, res) => {
+  const job = getJob(req.params.id);
+  if (!job) {
+    res.status(404).json({error: 'Job no encontrado.'});
+    return;
+  }
+
+  if (!Array.isArray(job.overlayPlan) || job.overlayPlan.length === 0) {
+    res.status(409).json({error: 'No hay animaciones para revisar.'});
+    return;
+  }
+
+  const action = String(req.body?.action || 'approve').trim().toLowerCase();
+  if (!['approve', 'reject', 'skip'].includes(action)) {
+    res.status(400).json({error: 'Acción inválida. Usa approve, reject o skip.'});
+    return;
+  }
+
+  const state = job.reviewState || {
+    mode: 'sequential',
+    currentIndex: 0,
+    approvedIds: [],
+    rejectedIds: [],
+    completed: false,
+  };
+
+  const currentIndex = Math.max(0, Math.min(state.currentIndex || 0, job.overlayPlan.length - 1));
+  const current = job.overlayPlan[currentIndex];
+
+  const approvedIds = Array.isArray(state.approvedIds) ? [...state.approvedIds] : [];
+  const rejectedIds = Array.isArray(state.rejectedIds) ? [...state.rejectedIds] : [];
+
+  if (current?.id) {
+    if (action === 'approve' && !approvedIds.includes(current.id)) {
+      approvedIds.push(current.id);
+    }
+    if ((action === 'reject' || action === 'skip') && !rejectedIds.includes(current.id)) {
+      rejectedIds.push(current.id);
+    }
+  }
+
+  const nextIndex = Math.min(currentIndex + 1, job.overlayPlan.length);
+  const completed = nextIndex >= job.overlayPlan.length;
+
+  const updated = updateJob(job.id, {
+    status: 'review',
+    stage: completed ? 'review-ready' : 'review-ready',
+    reviewState: {
+      mode: 'sequential',
+      currentIndex: completed ? job.overlayPlan.length - 1 : nextIndex,
+      approvedIds,
+      rejectedIds,
+      completed,
+    },
+  });
+
+  res.json(serializeJob(updated));
+});
+
 app.post('/api/jobs/:id/render', (req, res) => {
   const job = getJob(req.params.id);
   if (!job) {
@@ -684,12 +767,24 @@ app.post('/api/jobs/:id/render', (req, res) => {
     return;
   }
 
-  const hasOverlayPlan = Array.isArray(job.overlayPlan) && job.overlayPlan.length > 0;
+  const approvedIds = Array.isArray(job.reviewState?.approvedIds) ? job.reviewState.approvedIds : [];
+  const approvedOverlays = Array.isArray(job.overlayPlan)
+    ? job.overlayPlan.filter((event) => approvedIds.includes(event.id))
+    : [];
+
+  const hasOverlayPlan = approvedOverlays.length > 0;
   const hasScenePlan = Array.isArray(job.scenePlan) && job.scenePlan.length > 0;
 
   if (!(hasOverlayPlan || hasScenePlan) || !job.video || !job.transcript) {
-    res.status(409).json({error: 'Primero debes completar el análisis y revisar la propuesta.'});
+    res.status(409).json({error: 'Debes aprobar al menos una animación antes de renderizar.'});
     return;
+  }
+
+  if (approvedOverlays.length > 0) {
+    updateJob(job.id, {
+      overlayPlan: approvedOverlays,
+      scenePlan: eventsToScenes({events: approvedOverlays}),
+    });
   }
 
   if (job.stage === 'render-queued' || job.status === 'rendering') {

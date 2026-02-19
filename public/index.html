@@ -1127,8 +1127,9 @@
           </section>
 
           <section id="ai-panel" class="panel section-anchor" data-anchor="section-review" hidden>
-            <h2 class="panel-title">4. Ajustar y generar</h2>
-            <p class="panel-sub">Selecciona, edita o añade animaciones antes del render final.</p>
+            <h2 class="panel-title">4. Revisión secuencial de animaciones</h2>
+            <p class="panel-sub">Revisamos una animación cada vez. La apruebas y pasamos a la siguiente.</p>
+            <div id="review-progress" class="caption" style="margin-top: 8px"></div>
 
             <div class="inline-actions" style="margin-top: 10px">
               <button id="add-overlay-btn" type="button" class="ghost">Añadir animación</button>
@@ -1137,15 +1138,20 @@
             <div id="visual-editor" class="visual-editor"></div>
 
             <button id="apply-visual-btn" type="button" style="margin-top: 10px">Aplicar cambios visuales</button>
-            <div class="caption">Puedes ajustar mensaje, tiempo, estilo, energía y efectos de cada animación.</div>
+            <div class="caption">Edita la animación actual y aplica cambios.</div>
 
             <div id="chat-log" class="chat-log"></div>
 
-            <label for="refine-input">Ajuste con IA</label>
-            <textarea id="refine-input" placeholder="Ejemplo: acorta el CTA final y añade más energía en la entrada"></textarea>
+            <label for="refine-input">Mensaje para IA (animación actual)</label>
+            <textarea id="refine-input" placeholder="Ejemplo: cambia solo el color principal a azul oscuro"></textarea>
+
+            <div class="actions-row" style="margin-top: 10px">
+              <button id="refine-btn" type="button">Aplicar ajuste con IA</button>
+              <button id="approve-btn" type="button" class="secondary">Aprobar y siguiente</button>
+            </div>
 
             <div id="section-render" class="actions-row section-anchor" data-anchor="section-render" style="margin-top: 10px">
-              <button id="refine-btn" type="button">Aplicar ajuste con IA</button>
+              <button id="reject-btn" type="button" class="ghost">Saltar animación</button>
               <button id="render-btn" type="button" class="secondary">Generar video final</button>
             </div>
           </section>

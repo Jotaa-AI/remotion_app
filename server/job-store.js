@@ -54,6 +54,13 @@ export const createJob = ({file, sourceUrl, sourceType, brief}) => {
     scenePlan: null,
     sceneQuality: null,
     refinementHistory: [],
+    reviewState: {
+      mode: 'sequential',
+      currentIndex: 0,
+      approvedIds: [],
+      rejectedIds: [],
+      completed: false,
+    },
     error: null,
   };
 

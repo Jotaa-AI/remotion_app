@@ -46,6 +46,9 @@ const applyVisualBtn = document.getElementById('apply-visual-btn');
 const chatLog = document.getElementById('chat-log');
 const refineInput = document.getElementById('refine-input');
 const refineBtn = document.getElementById('refine-btn');
+const approveBtn = document.getElementById('approve-btn');
+const rejectBtn = document.getElementById('reject-btn');
+const reviewProgress = document.getElementById('review-progress');
 const renderBtn = document.getElementById('render-btn');
 
 if (LOCAL_UPLOAD_ONLY && youtubeInput) {
@@ -1129,24 +1132,31 @@ const renderVisualEditor = (job, editable) => {
   if (!Array.isArray(job.overlayPlan) || job.overlayPlan.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'caption';
-    empty.textContent = 'No hay animaciones propuestas todavia. Puedes anadir una manualmente.';
+    empty.textContent = 'No hay animaciones propuestas todavía.';
     visualEditor.appendChild(empty);
     return;
   }
 
   const toolkit = getToolkit(job);
+  const currentIndex = Math.max(0, Math.min(job.reviewState?.currentIndex || 0, job.overlayPlan.length - 1));
+  const current = job.currentOverlay || job.overlayPlan[currentIndex];
 
-  for (let index = 0; index < job.overlayPlan.length; index += 1) {
-    const event = job.overlayPlan[index];
-    const card = buildOverlayCard({
-      event,
-      index,
-      toolkit,
-      editable,
-      isNew: false,
-    });
-    visualEditor.appendChild(card);
+  if (!current) {
+    const done = document.createElement('div');
+    done.className = 'caption';
+    done.textContent = 'Revisión completada. Puedes renderizar el video final.';
+    visualEditor.appendChild(done);
+    return;
   }
+
+  const card = buildOverlayCard({
+    event: current,
+    index: currentIndex,
+    toolkit,
+    editable,
+    isNew: false,
+  });
+  visualEditor.appendChild(card);
 
   refreshOverlayTitles();
 };
@@ -1274,6 +1284,9 @@ const resetWorkspace = () => {
   addOverlayBtn.disabled = true;
   applyVisualBtn.disabled = true;
   refineBtn.disabled = true;
+  if (approveBtn) approveBtn.disabled = true;
+  if (rejectBtn) rejectBtn.disabled = true;
+  if (reviewProgress) reviewProgress.textContent = '';
   renderBtn.disabled = true;
 
   renderPipeline(null);
@@ -1296,10 +1309,28 @@ const updateUI = (job) => {
 
   aiPanel.hidden = !allowAiPanel;
 
+  const approvedCount = Array.isArray(job.reviewState?.approvedIds) ? job.reviewState.approvedIds.length : 0;
+  const totalCount = Array.isArray(job.overlayPlan) ? job.overlayPlan.length : 0;
+  const currentIndex = Math.max(0, Math.min(job.reviewState?.currentIndex || 0, Math.max(0, totalCount - 1)));
+  const completedReview = Boolean(job.reviewState?.completed) || (totalCount > 0 && currentIndex >= totalCount - 1 && approvedCount + (job.reviewState?.rejectedIds?.length || 0) >= totalCount);
+
   addOverlayBtn.disabled = !canEdit;
   applyVisualBtn.disabled = !canEdit;
   refineBtn.disabled = !canEdit;
-  renderBtn.disabled = !canEdit;
+  if (approveBtn) {
+    approveBtn.disabled = !canEdit || totalCount === 0;
+  }
+  if (rejectBtn) {
+    rejectBtn.disabled = !canEdit || totalCount === 0;
+  }
+  renderBtn.disabled = !canEdit || approvedCount === 0;
+
+  if (reviewProgress) {
+    reviewProgress.textContent = totalCount > 0 ? `Revisión: ${Math.min(currentIndex + 1, totalCount)}/${totalCount} · Aprobadas: ${approvedCount}` : 'Revisión: sin animaciones';
+    if (completedReview) {
+      reviewProgress.textContent = `${reviewProgress.textContent} · Revisión completada`;
+    }
+  }
 
   if (allowAiPanel) {
     renderVisualEditor(job, canEdit);
@@ -1628,6 +1659,8 @@ applyVisualBtn.addEventListener('click', async () => {
   pipelineError.textContent = '';
   applyVisualBtn.disabled = true;
   refineBtn.disabled = true;
+  if (approveBtn) approveBtn.disabled = true;
+  if (rejectBtn) rejectBtn.disabled = true;
   renderBtn.disabled = true;
   addOverlayBtn.disabled = true;
 
@@ -1667,6 +1700,8 @@ refineBtn.addEventListener('click', async () => {
   refineInput.value = '';
 
   refineBtn.disabled = true;
+  if (approveBtn) approveBtn.disabled = true;
+  if (rejectBtn) rejectBtn.disabled = true;
   renderBtn.disabled = true;
   applyVisualBtn.disabled = true;
   addOverlayBtn.disabled = true;
@@ -1690,6 +1725,58 @@ refineBtn.addEventListener('click', async () => {
   }
 });
 
+if (approveBtn) {
+  approveBtn.addEventListener('click', async () => {
+    if (!currentJobId) {
+      pipelineError.textContent = 'Error: Primero debes analizar un video.';
+      return;
+    }
+
+    pipelineError.textContent = '';
+    approveBtn.disabled = true;
+    if (rejectBtn) rejectBtn.disabled = true;
+
+    try {
+      const job = await fetchJson(`/api/jobs/${currentJobId}/review/advance`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'approve'}),
+      });
+
+      updateUI(job);
+      appendChat('assistant', 'Animación aprobada. Pasamos al siguiente momento.');
+    } catch (error) {
+      pipelineError.textContent = `Error: ${error.message}`;
+    }
+  });
+}
+
+if (rejectBtn) {
+  rejectBtn.addEventListener('click', async () => {
+    if (!currentJobId) {
+      pipelineError.textContent = 'Error: Primero debes analizar un video.';
+      return;
+    }
+
+    pipelineError.textContent = '';
+    rejectBtn.disabled = true;
+    if (approveBtn) approveBtn.disabled = true;
+
+    try {
+      const job = await fetchJson(`/api/jobs/${currentJobId}/review/advance`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'skip'}),
+      });
+
+      updateUI(job);
+      appendChat('assistant', 'Animación saltada. Continuamos con el siguiente momento.');
+    } catch (error) {
+      pipelineError.textContent = `Error: ${error.message}`;
+    }
+  });
+}
+
 renderBtn.addEventListener('click', async () => {
   if (!currentJobId) {
     pipelineError.textContent = 'Error: Primero debes analizar un video.';
@@ -1698,6 +1785,8 @@ renderBtn.addEventListener('click', async () => {
 
   pipelineError.textContent = '';
   refineBtn.disabled = true;
+  if (approveBtn) approveBtn.disabled = true;
+  if (rejectBtn) rejectBtn.disabled = true;
   renderBtn.disabled = true;
   applyVisualBtn.disabled = true;
   addOverlayBtn.disabled = true;

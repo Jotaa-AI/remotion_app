@@ -177,6 +177,13 @@ const analyzeJob = async (jobId) => {
     overlayPlan: normalizedEvents,
     scenePlan: optimized.scenes,
     sceneQuality: optimized.quality,
+    reviewState: {
+      mode: 'sequential',
+      currentIndex: 0,
+      approvedIds: [],
+      rejectedIds: [],
+      completed: normalizedEvents.length === 0,
+    },
     warnings: optimized.quality?.warnings || [],
     error: null,
   });
