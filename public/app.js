@@ -2,6 +2,8 @@ const form = document.getElementById('job-form');
 const submitBtn = document.getElementById('submit-btn');
 const fileInput = document.getElementById('video');
 const youtubeInput = document.getElementById('youtubeUrl');
+const LOCAL_UPLOAD_ONLY = true;
+const isLocalRuntime = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 const pipelineGlobalProgress = document.getElementById('pipeline-global-progress');
 const pipelineSvg = document.getElementById('pipeline-svg');
@@ -45,6 +47,10 @@ const chatLog = document.getElementById('chat-log');
 const refineInput = document.getElementById('refine-input');
 const refineBtn = document.getElementById('refine-btn');
 const renderBtn = document.getElementById('render-btn');
+
+if (LOCAL_UPLOAD_ONLY && youtubeInput) {
+  youtubeInput.disabled = true;
+}
 
 let pollTimer = null;
 let currentJobId = null;
@@ -1406,7 +1412,13 @@ form.addEventListener('submit', async (event) => {
 
   if (!hasFile && !youtubeUrl) {
     renderPipeline(null);
-    pipelineError.textContent = 'Error: Sube un video local o pega un enlace de YouTube.';
+    pipelineError.textContent = 'Error: Sube un video local desde tu ordenador.';
+    return;
+  }
+
+  if (LOCAL_UPLOAD_ONLY && !hasFile && youtubeUrl) {
+    renderPipeline(null);
+    pipelineError.textContent = 'Error: YouTube está desactivado temporalmente en nube. Usa subida local.';
     return;
   }
 

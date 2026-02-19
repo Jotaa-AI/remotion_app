@@ -1115,16 +1115,16 @@
         <div class="stack">
           <form id="job-form" class="panel section-anchor" data-anchor="section-input">
             <h2 class="panel-title">1. Entrada del video</h2>
-            <p class="panel-sub">Sube un archivo local o pega un enlace de YouTube para iniciar el pipeline.</p>
+            <p class="panel-sub">Sube un archivo local desde tu ordenador para iniciar el pipeline.</p>
 
-            <label for="video">Video local (opcional)</label>
+            <label for="video">Video local</label>
             <input id="video" name="video" type="file" accept="video/*" />
 
-            <label for="youtubeUrl">Enlace de YouTube (opcional)</label>
-            <input id="youtubeUrl" name="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off" />
+            <label for="youtubeUrl">Enlace de YouTube (desactivado temporalmente)</label>
+            <input id="youtubeUrl" name="youtubeUrl" type="url" placeholder="Temporalmente desactivado en nube" autocomplete="off" disabled />
 
             <button id="submit-btn" type="submit" style="margin-top: 12px">Analizar y proponer animaciones</button>
-            <div class="caption">Debes completar al menos uno: archivo local o URL de YouTube.</div>
+            <div class="caption">Modo estable: subida de archivo local.</div>
           </form>
 
           <section id="transcript-panel" class="panel section-anchor" data-anchor="section-transcript" hidden>
