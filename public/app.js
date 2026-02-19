@@ -1324,16 +1324,36 @@ const fetchJson = async (url, options = {}) => {
 };
 
 const uploadToVercelBlob = async (file) => {
-  const mod = await import('https://esm.sh/@vercel/blob/client');
+  const loadModule = async () => {
+    try {
+      return await import('https://esm.sh/@vercel/blob/client?bundle');
+    } catch {
+      return await import('https://cdn.jsdelivr.net/npm/@vercel/blob/+esm');
+    }
+  };
+
+  const withTimeout = (promise, ms) => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('La subida está tardando demasiado.')), ms);
+      }),
+    ]);
+  };
+
+  const mod = await withTimeout(loadModule(), 12000);
   const {upload} = mod;
 
   const safeName = String(file?.name || 'video.mp4').replace(/\s+/g, '-').toLowerCase();
   const pathname = `${Date.now()}-${safeName}`;
 
-  const blob = await upload(pathname, file, {
-    access: 'public',
-    handleUploadUrl: '/api/blob/upload',
-  });
+  const blob = await withTimeout(
+    upload(pathname, file, {
+      access: 'public',
+      handleUploadUrl: '/api/blob/upload',
+    }),
+    120000,
+  );
 
   return blob;
 };
@@ -1402,18 +1422,19 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  const tempSourceType = hasFile ? 'blob' : 'youtube';
-  renderPipeline({
-    status: 'queued',
-    stage: 'analyze-queued',
-    progress: 0,
-    warnings: [],
-    error: '',
-    inputSource: {type: tempSourceType},
-  });
-
   submitBtn.disabled = true;
   submitBtn.textContent = hasFile ? 'Subiendo video...' : 'Analizando...';
+
+  if (!hasFile) {
+    renderPipeline({
+      status: 'queued',
+      stage: 'analyze-queued',
+      progress: 0,
+      warnings: [],
+      error: '',
+      inputSource: {type: 'youtube'},
+    });
+  }
 
   try {
     let payload = null;
@@ -1442,7 +1463,11 @@ form.addEventListener('submit', async (event) => {
     currentJobId = payload.jobId;
     startPolling(payload.jobId);
   } catch (error) {
-    pipelineError.textContent = `Error: ${error.message}`;
+    const raw = String(error?.message || '');
+    const likelyWebview = /too long|tardando demasiado|import|network|failed to fetch/i.test(raw);
+    pipelineError.textContent = likelyWebview
+      ? 'Error: No se pudo completar la subida en este visor. Abre el enlace en Safari/Chrome e inténtalo de nuevo.'
+      : `Error: ${raw}`;
     submitBtn.disabled = false;
   } finally {
     submitBtn.textContent = 'Analizar y proponer animaciones';
