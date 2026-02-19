@@ -4,6 +4,7 @@ import {Readable} from 'stream';
 import {config} from './config.js';
 import {runCommand} from './shell.js';
 import ytdl from '@distube/ytdl-core';
+import YTDlpWrap from 'yt-dlp-wrap';
 
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -66,99 +67,148 @@ const findDownloadedFile = (prefix) => {
   return candidates[0] || null;
 };
 
+const makeFileResult = ({fullPath, filename, mimetype = 'video/mp4'}) => {
+  const stats = fs.statSync(fullPath);
+  return {
+    filename,
+    originalname: filename,
+    mimetype,
+    size: stats.size,
+    path: fullPath,
+  };
+};
+
+const tryYtDlpBinary = async ({token, youtubeUrl}) => {
+  const outputTemplate = path.join(config.uploadsDir, `${token}.%(ext)s`);
+  await runCommand('yt-dlp', [
+    '--no-playlist',
+    '--merge-output-format',
+    'mp4',
+    '-f',
+    'bestvideo+bestaudio/best',
+    '--restrict-filenames',
+    '--newline',
+    '-o',
+    outputTemplate,
+    youtubeUrl,
+  ]);
+
+  const downloaded = findDownloadedFile(token);
+  if (!downloaded) {
+    throw new Error('yt-dlp terminó, pero no se encontró el archivo descargado en uploads.');
+  }
+
+  return makeFileResult({
+    fullPath: downloaded.fullPath,
+    filename: downloaded.filename,
+  });
+};
+
+const tryYtDlpWrap = async ({token, youtubeUrl}) => {
+  const outputPath = path.join(config.uploadsDir, `${token}.mp4`);
+  const YTDlpWrapCtor = YTDlpWrap?.default?.default || YTDlpWrap?.default || YTDlpWrap;
+  if (typeof YTDlpWrapCtor !== 'function') {
+    throw new Error('yt-dlp-wrap no expone constructor válido.');
+  }
+
+  const binaryPath = path.join(config.uploadsDir, process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  if (!fs.existsSync(binaryPath)) {
+    await YTDlpWrapCtor.downloadFromGithub(binaryPath);
+  }
+
+  const wrap = new YTDlpWrapCtor(binaryPath);
+
+  await wrap.execPromise([
+    '--no-playlist',
+    '--no-warnings',
+    '--format',
+    'best[ext=mp4]/best',
+    '--output',
+    outputPath,
+    youtubeUrl,
+  ]);
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error('yt-dlp-wrap no generó el archivo esperado.');
+  }
+
+  return makeFileResult({
+    fullPath: outputPath,
+    filename: path.basename(outputPath),
+  });
+};
+
+const tryYtdlCore = async ({token, youtubeUrl}) => {
+  const cookieHeader = process.env.YOUTUBE_COOKIE || '';
+  const requestOptions = cookieHeader
+    ? {
+        headers: {
+          cookie: cookieHeader,
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        },
+      }
+    : undefined;
+
+  const info = await ytdl.getInfo(youtubeUrl, {
+    requestOptions,
+  });
+
+  const format =
+    ytdl.chooseFormat(info.formats, {
+      quality: 'highest',
+      filter: (f) => f.hasVideo && f.hasAudio && f.container === 'mp4',
+    }) || ytdl.chooseFormat(info.formats, {quality: 'highest', filter: 'audioandvideo'});
+
+  if (!format || !format.url) {
+    throw new Error('No se encontró un formato reproducible en YouTube.');
+  }
+
+  const filename = `${token}.mp4`;
+  const fullPath = path.join(config.uploadsDir, filename);
+
+  await new Promise((resolve, reject) => {
+    const ws = fs.createWriteStream(fullPath);
+    ytdl
+      .downloadFromInfo(info, {format, requestOptions})
+      .on('error', reject)
+      .pipe(ws)
+      .on('finish', resolve)
+      .on('error', reject);
+  });
+
+  return makeFileResult({
+    fullPath,
+    filename,
+  });
+};
+
 export const downloadYoutubeVideo = async ({jobId, youtubeUrl}) => {
   const token = `yt-${jobId}-${Date.now()}`;
-  const outputTemplate = path.join(config.uploadsDir, `${token}.%(ext)s`);
+
+  const errors = [];
 
   try {
-    await runCommand('yt-dlp', [
-      '--no-playlist',
-      '--merge-output-format',
-      'mp4',
-      '-f',
-      'bestvideo+bestaudio/best',
-      '--restrict-filenames',
-      '--newline',
-      '-o',
-      outputTemplate,
-      youtubeUrl,
-    ]);
-
-    const downloaded = findDownloadedFile(token);
-    if (!downloaded) {
-      throw new Error('yt-dlp terminó, pero no se encontró el archivo descargado en uploads.');
-    }
-
-    const stats = fs.statSync(downloaded.fullPath);
-    return {
-      filename: downloaded.filename,
-      originalname: downloaded.filename,
-      mimetype: 'video/mp4',
-      size: stats.size,
-      path: downloaded.fullPath,
-    };
+    return await tryYtDlpBinary({token, youtubeUrl});
   } catch (error) {
-    const missingYtDlp = /ENOENT|spawn yt-dlp/i.test(String(error?.message || ''));
-    if (!missingYtDlp) {
-      throw new Error(`No se pudo descargar el video de YouTube: ${error.message}`);
-    }
-
-    // Fallback Vercel-friendly: ytdl-core (sin binarios externos)
-    try {
-      const cookieHeader = process.env.YOUTUBE_COOKIE || '';
-      const requestOptions = cookieHeader
-        ? {
-            headers: {
-              cookie: cookieHeader,
-              'user-agent':
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            },
-          }
-        : undefined;
-
-      const info = await ytdl.getInfo(youtubeUrl, {
-        requestOptions,
-      });
-
-      const format =
-        ytdl.chooseFormat(info.formats, {
-          quality: 'highest',
-          filter: (f) => f.hasVideo && f.hasAudio && f.container === 'mp4',
-        }) || ytdl.chooseFormat(info.formats, {quality: 'highest', filter: 'audioandvideo'});
-
-      if (!format || !format.url) {
-        throw new Error('No se encontró un formato reproducible en YouTube.');
-      }
-
-      const filename = `${token}.mp4`;
-      const fullPath = path.join(config.uploadsDir, filename);
-
-      await new Promise((resolve, reject) => {
-        const ws = fs.createWriteStream(fullPath);
-        ytdl
-          .downloadFromInfo(info, {format, requestOptions})
-          .on('error', reject)
-          .pipe(ws)
-          .on('finish', resolve)
-          .on('error', reject);
-      });
-
-      const stats = fs.statSync(fullPath);
-      return {
-        filename,
-        originalname: filename,
-        mimetype: 'video/mp4',
-        size: stats.size,
-        path: fullPath,
-      };
-    } catch (fallbackError) {
-      const hint =
-        String(fallbackError?.message || '').includes('410') || String(fallbackError?.message || '').includes('403')
-          ? ' YouTube bloqueó la descarga desde servidor. Prueba otro enlace o configura YOUTUBE_COOKIE en Vercel.'
-          : '';
-      throw new Error(`No se pudo descargar el video de YouTube (fallback): ${fallbackError.message}.${hint}`);
-    }
+    errors.push(`yt-dlp: ${error.message}`);
   }
+
+  try {
+    return await tryYtDlpWrap({token, youtubeUrl});
+  } catch (error) {
+    errors.push(`yt-dlp-wrap: ${error.message}`);
+  }
+
+  try {
+    return await tryYtdlCore({token, youtubeUrl});
+  } catch (error) {
+    errors.push(`ytdl-core: ${error.message}`);
+  }
+
+  throw new Error(
+    `No se pudo descargar el video de YouTube. ${errors.join(' | ')}. Si el video está protegido por anti-bot, configura YOUTUBE_COOKIE en Vercel.`,
+  );
 };
 
 export const downloadRemoteVideo = async ({jobId, sourceUrl}) => {
