@@ -24,6 +24,10 @@ const pipelineLocalProgressBar = document.getElementById('pipeline-local-progres
 const pipelineLocalProgressText = document.getElementById('pipeline-local-progress-text');
 const pipelineWarning = document.getElementById('pipeline-warning');
 const pipelineError = document.getElementById('pipeline-error');
+const liveStepChip = document.getElementById('live-step-chip');
+const liveStepTitle = document.getElementById('live-step-title');
+const liveStepAction = document.getElementById('live-step-action');
+const liveStepProgress = document.getElementById('live-step-progress');
 
 const transcriptPanel = document.getElementById('transcript-panel');
 const transcriptPreviewEl = document.getElementById('transcript-preview');
@@ -761,6 +765,8 @@ const renderPipelineMobile = (runtime) => {
 const renderPipelineDetail = (runtime) => {
   const selected = PHASE_BY_ID.get(runtime.selectedPhaseId) || PHASES[0];
   const selectedState = runtime.phaseStates[selected.id] || 'pending';
+  const currentPhase = PHASE_BY_ID.get(runtime.currentPhaseId) || PHASES[0];
+  const currentState = runtime.phaseStates[currentPhase.id] || 'pending';
 
   pipelineGlobalProgress.textContent = `${Math.round(runtime.globalRatio * 100)}% completado`;
 
@@ -786,6 +792,23 @@ const renderPipelineDetail = (runtime) => {
 
   pipelineWarning.textContent = runtime.warnings.length > 0 ? `Avisos: ${runtime.warnings.join(' | ')}` : '';
   pipelineError.textContent = runtime.error ? `Error: ${runtime.error}` : '';
+
+  if (liveStepChip) {
+    liveStepChip.className = `live-step-chip ${currentState}`;
+    liveStepChip.textContent = phaseStateLabel(currentState);
+  }
+
+  if (liveStepTitle) {
+    liveStepTitle.textContent = currentPhase.label;
+  }
+
+  if (liveStepAction) {
+    liveStepAction.textContent = runtime.action;
+  }
+
+  if (liveStepProgress) {
+    liveStepProgress.style.width = `${Math.round(runtime.globalRatio * 100)}%`;
+  }
 };
 
 const renderPipeline = (job) => {
@@ -1323,41 +1346,6 @@ const fetchJson = async (url, options = {}) => {
   return payload;
 };
 
-const uploadToVercelBlob = async (file) => {
-  const loadModule = async () => {
-    try {
-      return await import('https://esm.sh/@vercel/blob/client?bundle');
-    } catch {
-      return await import('https://cdn.jsdelivr.net/npm/@vercel/blob/+esm');
-    }
-  };
-
-  const withTimeout = (promise, ms) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('La subida está tardando demasiado.')), ms);
-      }),
-    ]);
-  };
-
-  const mod = await withTimeout(loadModule(), 12000);
-  const {upload} = mod;
-
-  const safeName = String(file?.name || 'video.mp4').replace(/\s+/g, '-').toLowerCase();
-  const pathname = `${Date.now()}-${safeName}`;
-
-  const blob = await withTimeout(
-    upload(pathname, file, {
-      access: 'public',
-      handleUploadUrl: '/api/blob/upload',
-    }),
-    120000,
-  );
-
-  return blob;
-};
-
 const checkBackendAvailability = async () => {
   try {
     await fetchJson('/api/health');
@@ -1422,52 +1410,34 @@ form.addEventListener('submit', async (event) => {
     return;
   }
 
-  submitBtn.disabled = true;
-  submitBtn.textContent = hasFile ? 'Subiendo video...' : 'Analizando...';
+  const tempSourceType = hasFile ? 'upload' : 'youtube';
+  renderPipeline({
+    status: 'queued',
+    stage: 'analyze-queued',
+    progress: 0,
+    warnings: [],
+    error: '',
+    inputSource: {type: tempSourceType},
+  });
 
-  if (!hasFile) {
-    renderPipeline({
-      status: 'queued',
-      stage: 'analyze-queued',
-      progress: 0,
-      warnings: [],
-      error: '',
-      inputSource: {type: 'youtube'},
-    });
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Analizando...';
+
+  const formData = new FormData(form);
+  if (youtubeUrl) {
+    formData.set('youtubeUrl', youtubeUrl);
   }
 
   try {
-    let payload = null;
-
-    if (hasFile) {
-      const file = fileInput.files[0];
-      const blob = await uploadToVercelBlob(file);
-
-      payload = await fetchJson('/api/jobs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({blobUrl: blob.url}),
-      });
-    } else {
-      const formData = new FormData();
-      formData.set('youtubeUrl', youtubeUrl);
-
-      payload = await fetchJson('/api/jobs', {
-        method: 'POST',
-        body: formData,
-      });
-    }
+    const payload = await fetchJson('/api/jobs', {
+      method: 'POST',
+      body: formData,
+    });
 
     currentJobId = payload.jobId;
     startPolling(payload.jobId);
   } catch (error) {
-    const raw = String(error?.message || '');
-    const likelyWebview = /too long|tardando demasiado|import|network|failed to fetch/i.test(raw);
-    pipelineError.textContent = likelyWebview
-      ? 'Error: No se pudo completar la subida en este visor. Abre el enlace en Safari/Chrome e inténtalo de nuevo.'
-      : `Error: ${raw}`;
+    pipelineError.textContent = `Error: ${error.message}`;
     submitBtn.disabled = false;
   } finally {
     submitBtn.textContent = 'Analizar y proponer animaciones';
