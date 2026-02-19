@@ -3,7 +3,7 @@ import path from 'path';
 import {Readable} from 'stream';
 import {config} from './config.js';
 import {runCommand} from './shell.js';
-import ytdl from 'ytdl-core';
+import ytdl from '@distube/ytdl-core';
 
 const YOUTUBE_HOSTS = new Set([
   'youtube.com',
@@ -105,9 +105,23 @@ export const downloadYoutubeVideo = async ({jobId, youtubeUrl}) => {
 
     // Fallback Vercel-friendly: ytdl-core (sin binarios externos)
     try {
-      const info = await ytdl.getInfo(youtubeUrl);
-      const format = ytdl
-        .chooseFormat(info.formats, {
+      const cookieHeader = process.env.YOUTUBE_COOKIE || '';
+      const requestOptions = cookieHeader
+        ? {
+            headers: {
+              cookie: cookieHeader,
+              'user-agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            },
+          }
+        : undefined;
+
+      const info = await ytdl.getInfo(youtubeUrl, {
+        requestOptions,
+      });
+
+      const format =
+        ytdl.chooseFormat(info.formats, {
           quality: 'highest',
           filter: (f) => f.hasVideo && f.hasAudio && f.container === 'mp4',
         }) || ytdl.chooseFormat(info.formats, {quality: 'highest', filter: 'audioandvideo'});
@@ -121,7 +135,8 @@ export const downloadYoutubeVideo = async ({jobId, youtubeUrl}) => {
 
       await new Promise((resolve, reject) => {
         const ws = fs.createWriteStream(fullPath);
-        ytdl.downloadFromInfo(info, {format})
+        ytdl
+          .downloadFromInfo(info, {format, requestOptions})
           .on('error', reject)
           .pipe(ws)
           .on('finish', resolve)
@@ -137,7 +152,11 @@ export const downloadYoutubeVideo = async ({jobId, youtubeUrl}) => {
         path: fullPath,
       };
     } catch (fallbackError) {
-      throw new Error(`No se pudo descargar el video de YouTube (fallback): ${fallbackError.message}`);
+      const hint =
+        String(fallbackError?.message || '').includes('410') || String(fallbackError?.message || '').includes('403')
+          ? ' YouTube bloqueó la descarga desde servidor. Prueba otro enlace o configura YOUTUBE_COOKIE en Vercel.'
+          : '';
+      throw new Error(`No se pudo descargar el video de YouTube (fallback): ${fallbackError.message}.${hint}`);
     }
   }
 };
