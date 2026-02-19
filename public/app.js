@@ -678,6 +678,10 @@ const computePipelineRuntime = (job) => {
 };
 
 const renderPipelineDesktop = (runtime) => {
+  if (!pipelinePathBase || !pipelinePathProgress || !pipelinePulse || !pipelineNodes) {
+    return;
+  }
+
   const d = buildThreadPath(DESKTOP_POINTS);
   pipelinePathBase.setAttribute('d', d);
   pipelinePathProgress.setAttribute('d', d);
@@ -741,6 +745,10 @@ const renderPipelineDesktop = (runtime) => {
 };
 
 const renderPipelineMobile = (runtime) => {
+  if (!pipelineMobileList || !pipelineMobileFill || !pipelineMobilePulse) {
+    return;
+  }
+
   pipelineMobileList.innerHTML = '';
 
   PHASES.forEach((phase, index) => {
@@ -774,30 +782,54 @@ const renderPipelineDetail = (runtime) => {
   const currentPhase = PHASE_BY_ID.get(runtime.currentPhaseId) || PHASES[0];
   const currentState = runtime.phaseStates[currentPhase.id] || 'pending';
 
-  pipelineGlobalProgress.textContent = `${Math.round(runtime.globalRatio * 100)}% completado`;
-
-  pipelinePhaseChip.className = `phase-chip ${selectedState}`;
-  pipelinePhaseChip.textContent = phaseStateLabel(selectedState);
-
-  pipelinePhaseStep.textContent = `Paso ${selected.index + 1}/${PHASES.length}`;
-  pipelinePhaseTitle.textContent = selected.label;
-  pipelinePhaseSummary.textContent = selected.summary;
-
-  if (runtime.selectedPhaseId === runtime.currentPhaseId) {
-    pipelinePhaseAction.textContent = runtime.action;
-  } else {
-    pipelinePhaseAction.textContent = `${selected.summary} (vista fijada)`;
+  if (pipelineGlobalProgress) {
+    pipelineGlobalProgress.textContent = `${Math.round(runtime.globalRatio * 100)}% completado`;
   }
 
-  pipelineInput.textContent = selected.input;
-  pipelineOutput.textContent = selected.output;
+  if (pipelinePhaseChip) {
+    pipelinePhaseChip.className = `phase-chip ${selectedState}`;
+    pipelinePhaseChip.textContent = phaseStateLabel(selectedState);
+  }
+
+  if (pipelinePhaseStep) {
+    pipelinePhaseStep.textContent = `Paso ${selected.index + 1}/${PHASES.length}`;
+  }
+  if (pipelinePhaseTitle) {
+    pipelinePhaseTitle.textContent = selected.label;
+  }
+  if (pipelinePhaseSummary) {
+    pipelinePhaseSummary.textContent = selected.summary;
+  }
+
+  if (pipelinePhaseAction) {
+    if (runtime.selectedPhaseId === runtime.currentPhaseId) {
+      pipelinePhaseAction.textContent = runtime.action;
+    } else {
+      pipelinePhaseAction.textContent = `${selected.summary} (vista fijada)`;
+    }
+  }
+
+  if (pipelineInput) {
+    pipelineInput.textContent = selected.input;
+  }
+  if (pipelineOutput) {
+    pipelineOutput.textContent = selected.output;
+  }
 
   const localProgress = runtime.selectedPhaseId === runtime.currentPhaseId ? runtime.localRatio : selectedState === 'completed' || selectedState === 'omitted' ? 1 : selectedState === 'pending' ? 0 : 0.5;
-  pipelineLocalProgressBar.style.width = `${Math.round(localProgress * 100)}%`;
-  pipelineLocalProgressText.textContent = `Progreso de fase: ${Math.round(localProgress * 100)}%`;
+  if (pipelineLocalProgressBar) {
+    pipelineLocalProgressBar.style.width = `${Math.round(localProgress * 100)}%`;
+  }
+  if (pipelineLocalProgressText) {
+    pipelineLocalProgressText.textContent = `Progreso de fase: ${Math.round(localProgress * 100)}%`;
+  }
 
-  pipelineWarning.textContent = runtime.warnings.length > 0 ? `Avisos: ${runtime.warnings.join(' | ')}` : '';
-  pipelineError.textContent = runtime.error ? `Error: ${runtime.error}` : '';
+  if (pipelineWarning) {
+    pipelineWarning.textContent = runtime.warnings.length > 0 ? `Avisos: ${runtime.warnings.join(' | ')}` : '';
+  }
+  if (pipelineError) {
+    pipelineError.textContent = runtime.error ? `Error: ${runtime.error}` : '';
+  }
 
   if (liveStepChip) {
     liveStepChip.className = `live-step-chip ${currentState}`;

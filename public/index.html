@@ -12,25 +12,25 @@
     />
     <style>
       :root {
-        --bg-a: #eef4ff;
-        --bg-b: #f7fbff;
-        --surface: rgba(255, 255, 255, 0.9);
-        --surface-strong: #ffffff;
-        --line: #d7e4ff;
-        --line-strong: #aac1ff;
-        --text: #0d1b38;
-        --muted: #5f708f;
-        --brand: #1f5eff;
-        --brand-2: #13b5ff;
-        --brand-ink: #183c9b;
-        --success: #14804f;
-        --warning: #9b5f00;
-        --danger: #c03e3e;
+        --bg-a: #0b1020;
+        --bg-b: #070b16;
+        --surface: rgba(15, 23, 42, 0.86);
+        --surface-strong: rgba(17, 25, 40, 0.95);
+        --line: rgba(148, 163, 184, 0.25);
+        --line-strong: rgba(96, 165, 250, 0.55);
+        --text: #e5edf8;
+        --muted: #9fb0c8;
+        --brand: #5b7cff;
+        --brand-2: #22d3ee;
+        --brand-ink: #c7d2fe;
+        --success: #34d399;
+        --warning: #f59e0b;
+        --danger: #fb7185;
         --radius-xl: 24px;
         --radius-lg: 18px;
         --radius-md: 14px;
-        --shadow-soft: 0 20px 55px rgba(31, 94, 255, 0.14);
-        --shadow-card: 0 10px 30px rgba(15, 34, 79, 0.08);
+        --shadow-soft: 0 20px 55px rgba(0, 0, 0, 0.45);
+        --shadow-card: 0 10px 30px rgba(0, 0, 0, 0.35);
       }
 
       * {
@@ -47,8 +47,8 @@
         font-family: 'Manrope', 'Avenir Next', sans-serif;
         color: var(--text);
         background:
-          radial-gradient(circle at 6% 4%, rgba(46, 124, 255, 0.22) 0%, transparent 34%),
-          radial-gradient(circle at 92% 10%, rgba(19, 181, 255, 0.22) 0%, transparent 34%),
+          radial-gradient(circle at 8% 5%, rgba(91, 124, 255, 0.25) 0%, transparent 36%),
+          radial-gradient(circle at 90% 12%, rgba(34, 211, 238, 0.16) 0%, transparent 34%),
           linear-gradient(180deg, var(--bg-b) 0%, var(--bg-a) 100%);
       }
 
@@ -64,8 +64,8 @@
         align-items: center;
         gap: 14px;
         border-radius: var(--radius-lg);
-        border: 1px solid rgba(255, 255, 255, 0.85);
-        background: linear-gradient(165deg, rgba(255, 255, 255, 0.9) 0%, rgba(247, 251, 255, 0.8) 100%);
+        border: 1px solid var(--line);
+        background: linear-gradient(165deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.86) 100%);
         backdrop-filter: blur(8px);
         box-shadow: var(--shadow-soft);
         padding: 10px 16px;
@@ -108,8 +108,8 @@
         border: 1px solid var(--line);
         border-radius: 999px;
         padding: 7px 12px;
-        background: #fff;
-        color: #1947b4;
+        background: rgba(15, 23, 42, 0.82);
+        color: #bfdbfe;
         font-size: 12px;
         font-weight: 700;
       }
@@ -277,8 +277,8 @@
       .global-progress-pill {
         border: 1px solid var(--line-strong);
         border-radius: 999px;
-        background: #fff;
-        color: #173f9d;
+        background: rgba(15, 23, 42, 0.86);
+        color: #bfdbfe;
         font-size: 12px;
         font-weight: 800;
         padding: 7px 13px;
@@ -691,7 +691,7 @@
         margin: 11px 0 6px;
         font-size: 12px;
         font-weight: 700;
-        color: #2a3c60;
+        color: #c7d2fe;
       }
 
       input[type='file'],
@@ -711,9 +711,9 @@
       input[type='number'],
       select,
       textarea {
-        border: 1px solid #b8cbf8;
+        border: 1px solid var(--line);
         border-radius: 12px;
-        background: #f5f8ff;
+        background: rgba(15, 23, 42, 0.88);
         color: var(--text);
         font-size: 14px;
         padding: 10px 11px;
@@ -741,8 +741,8 @@
 
       button.ghost {
         border: 1px solid var(--line-strong);
-        background: #fff;
-        color: #1f5eff;
+        background: rgba(15, 23, 42, 0.84);
+        color: #dbeafe;
       }
 
       button:disabled {
@@ -1044,70 +1044,49 @@
         </div>
       </section>
 
-      <section class="process-map-shell" id="process-map-shell">
-        <div class="process-map-head">
+      <section class="panel" id="status-window" style="margin-top: 14px">
+        <div class="process-map-head" style="padding: 0; border: 0; margin-bottom: 10px">
           <div>
-            <h2>Mapa del pipeline end-to-end</h2>
-            <p>11 fases enlazadas, progreso continuo y detalle contextual del paso activo.</p>
+            <h2 style="margin: 0; font-size: 18px">Estado actual</h2>
+            <p style="margin: 6px 0 0; color: var(--muted); font-size: 12px">Vista en tiempo real de lo que está ejecutando la IA.</p>
           </div>
           <div id="pipeline-global-progress" class="global-progress-pill">0% completado</div>
         </div>
 
-        <div class="process-map-grid">
-          <article class="process-map-canvas">
-            <svg id="pipeline-svg" class="pipeline-svg" viewBox="0 0 1240 280" aria-label="Diagrama del pipeline">
-              <defs>
-                <linearGradient id="threadProgressGradient" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0%" stop-color="#13b5ff" />
-                  <stop offset="58%" stop-color="#1f5eff" />
-                  <stop offset="100%" stop-color="#174dbf" />
-                </linearGradient>
-              </defs>
-              <path id="pipeline-path-base" class="thread-base" d="" />
-              <path id="pipeline-path-progress" class="thread-progress" d="" />
-              <circle id="pipeline-pulse" class="thread-pulse" cx="0" cy="0" r="7" fill="#1f5eff" />
-              <g id="pipeline-nodes"></g>
-            </svg>
+        <article class="process-map-detail" style="border: 0; padding: 0; background: transparent">
+          <div id="pipeline-phase-chip" class="phase-chip pending">Pendiente</div>
+          <div id="pipeline-phase-step" class="phase-step">Paso 1/11</div>
+          <h3 id="pipeline-phase-title" class="phase-title">Esperando inicio</h3>
+          <p id="pipeline-phase-summary" class="phase-summary">Sube un video para comenzar el análisis.</p>
+          <div id="pipeline-phase-action" class="phase-action">Esperando inicio del proceso.</div>
 
-            <div class="process-map-mobile" id="process-map-mobile">
-              <div class="mobile-timeline">
-                <div class="mobile-timeline-rail">
-                  <div id="pipeline-mobile-fill" class="mobile-timeline-fill"></div>
-                  <div id="pipeline-mobile-pulse" class="mobile-timeline-pulse"></div>
-                </div>
-                <ul id="pipeline-mobile-list" class="mobile-phase-list"></ul>
-              </div>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <div class="detail-label">Entrada esperada</div>
+              <div id="pipeline-input" class="detail-value">Video local.</div>
             </div>
-          </article>
-
-          <article class="process-map-detail">
-            <div id="pipeline-phase-chip" class="phase-chip pending">Pendiente</div>
-            <div id="pipeline-phase-step" class="phase-step">Paso 1/11</div>
-            <h3 id="pipeline-phase-title" class="phase-title">Entrada recibida</h3>
-            <p id="pipeline-phase-summary" class="phase-summary">Inicia el análisis para activar el pipeline.</p>
-            <div id="pipeline-phase-action" class="phase-action">Esperando inicio del proceso.</div>
-
-            <div class="detail-grid">
-              <div class="detail-item">
-                <div class="detail-label">Entrada esperada</div>
-                <div id="pipeline-input" class="detail-value">Video local o enlace de YouTube.</div>
-              </div>
-              <div class="detail-item">
-                <div class="detail-label">Salida esperada</div>
-                <div id="pipeline-output" class="detail-value">Fuente validada y lista para procesar.</div>
-              </div>
+            <div class="detail-item">
+              <div class="detail-label">Salida esperada</div>
+              <div id="pipeline-output" class="detail-value">Resultado de la fase actual.</div>
             </div>
+          </div>
 
-            <div>
-              <div class="mini-progress">
-                <div id="pipeline-local-progress-bar" class="mini-progress-bar"></div>
-              </div>
-              <div id="pipeline-local-progress-text" class="mini-progress-text">Progreso de fase: 0%</div>
+          <div>
+            <div class="mini-progress">
+              <div id="pipeline-local-progress-bar" class="mini-progress-bar"></div>
             </div>
+            <div id="pipeline-local-progress-text" class="mini-progress-text">Progreso de fase: 0%</div>
+          </div>
 
-            <p id="pipeline-warning" class="inline-note warning"></p>
-            <p id="pipeline-error" class="inline-note error"></p>
-          </article>
+          <p id="pipeline-warning" class="inline-note warning"></p>
+          <p id="pipeline-error" class="inline-note error"></p>
+        </article>
+
+        <div style="display:none" aria-hidden="true">
+          <svg id="pipeline-svg"><path id="pipeline-path-base"></path><path id="pipeline-path-progress"></path><circle id="pipeline-pulse"></circle><g id="pipeline-nodes"></g></svg>
+          <ul id="pipeline-mobile-list"></ul>
+          <div id="pipeline-mobile-fill"></div>
+          <div id="pipeline-mobile-pulse"></div>
         </div>
       </section>
 
