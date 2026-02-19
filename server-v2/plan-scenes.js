@@ -173,7 +173,8 @@ const llmPlanScenes = async ({brief, transcriptText, analysisInsights, durationS
     'Cada scene debe tener: id,startSec,durationSec,intent,stylePack,layers[].',
     'Tipos de layer permitidos: text, shape, metric.',
     'shape permitido: rect,circle,pill.',
-    'NO uses plantillas. Debes construir escenas por capas.',
+    'NO uses plantillas. Debes construir escenas por capas y cada escena debe sentirse única.',
+    'La duración de cada escena debe ajustarse al tramo real de explicación; evita escenas más largas que la idea que ilustran.',
     'Máximo 10 scenes. Máximo 8 layers por scene.',
     `Duración máxima del video: ${durationSec.toFixed(2)} segundos.`,
   ].join(' ');

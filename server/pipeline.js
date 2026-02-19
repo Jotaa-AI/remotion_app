@@ -161,6 +161,7 @@ const analyzeJob = async (jobId) => {
     scenePlan: scenePlan.scenes,
     durationSec: metadata.durationSec,
     fallbackEvents: normalizedEvents,
+    words: transcript.words,
   });
 
   updateJob(jobId, {

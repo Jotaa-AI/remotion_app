@@ -3,6 +3,56 @@ import {eventsToScenes} from './event-to-scene.js';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
+const findSpeechWindowForScene = ({scene, words = [], durationSec = 0}) => {
+  if (!Array.isArray(words) || words.length === 0) {
+    return {
+      startSec: scene.startSec,
+      endSec: Math.min(durationSec || scene.startSec + scene.durationSec, scene.startSec + scene.durationSec),
+    };
+  }
+
+  const sceneStart = Number(scene.startSec || 0);
+  const sceneEnd = sceneStart + Number(scene.durationSec || 0);
+
+  const nearby = words.filter((w) => {
+    const ws = Number(w?.start || 0);
+    return ws >= sceneStart - 0.8 && ws <= sceneEnd + 3.5;
+  });
+
+  if (nearby.length === 0) {
+    return {
+      startSec: sceneStart,
+      endSec: sceneEnd,
+    };
+  }
+
+  const startSec = Math.max(0, Number(nearby[0]?.start || sceneStart));
+  const endSec = Number(nearby[nearby.length - 1]?.end || sceneEnd);
+
+  return {
+    startSec,
+    endSec,
+  };
+};
+
+const alignSceneDurationToSpeech = ({scene, words = [], durationSec = 0}) => {
+  const safeDuration = Math.max(1, Number(durationSec || 0));
+  const maxSceneEnd = Math.max(0.6, safeDuration - 0.1);
+
+  const speech = findSpeechWindowForScene({scene, words, durationSec: safeDuration});
+
+  const adjustedStart = clamp(Number(scene.startSec || 0), 0, maxSceneEnd - 0.5);
+  const speechEnd = clamp(Number(speech.endSec || adjustedStart + scene.durationSec), adjustedStart + 0.5, maxSceneEnd);
+
+  const desiredDuration = clamp(speechEnd - adjustedStart + 0.25, 0.6, 8);
+
+  return {
+    ...scene,
+    startSec: Number(adjustedStart.toFixed(2)),
+    durationSec: Number(desiredDuration.toFixed(2)),
+  };
+};
+
 const scoreScene = (scene) => {
   const layers = Array.isArray(scene?.layers) ? scene.layers : [];
   const textLayers = layers.filter((l) => l.type === 'text');
@@ -58,7 +108,7 @@ const antiClutterScene = (scene) => {
   };
 };
 
-export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvents = []}) => {
+export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvents = [], words = []}) => {
   const warnings = [];
 
   let compiled;
@@ -71,7 +121,9 @@ export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvent
     warnings.push('scene-plan-fallback-from-events');
   }
 
-  const optimizedScenes = compiled.scenes.map((scene) => antiClutterScene(scene));
+  const optimizedScenes = compiled.scenes
+    .map((scene) => antiClutterScene(scene))
+    .map((scene) => alignSceneDurationToSpeech({scene, words, durationSec}));
 
   const scores = optimizedScenes.map((scene) => ({
     sceneId: scene.id,
@@ -85,7 +137,9 @@ export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvent
   if (avgScore < 0.55 && Array.isArray(fallbackEvents) && fallbackEvents.length > 0) {
     warnings.push('scene-plan-low-quality-fallback');
     const fallbackScenes = eventsToScenes({events: fallbackEvents});
-    finalScenes = compileScenePlan({plan: {scenes: fallbackScenes}, durationSec}).scenes.map((scene) => antiClutterScene(scene));
+    finalScenes = compileScenePlan({plan: {scenes: fallbackScenes}, durationSec}).scenes
+      .map((scene) => antiClutterScene(scene))
+      .map((scene) => alignSceneDurationToSpeech({scene, words, durationSec}));
   }
 
   return {
