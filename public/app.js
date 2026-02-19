@@ -1180,13 +1180,14 @@ const renderInsights = (job) => {
 
   insightsPanel.hidden = false;
 
-  for (const insight of insights) {
+  insights.forEach((insight, index) => {
     const card = document.createElement('article');
     card.className = 'insight-card';
 
     const time = document.createElement('div');
     time.className = 'insight-time';
-    time.textContent = `Min ${formatClock(insight.timeSec)}`;
+    const role = String(insight.narrativeRole || 'explanation').toUpperCase();
+    time.textContent = `Momento ${index + 1} · ${formatClock(insight.timeSec)} · ${role}`;
 
     const topic = document.createElement('h3');
     topic.className = 'insight-topic';
@@ -1194,16 +1195,15 @@ const renderInsights = (job) => {
 
     const why = document.createElement('p');
     why.className = 'insight-text';
-    const sentenceTopic = insight.topic || 'un punto relevante';
-    why.textContent = `En ${formatClock(insight.timeSec)} hablas sobre "${sentenceTopic}". Conviene reforzarlo porque ${insight.whyImportant || 'es clave para la narrativa'}.`;
+    why.textContent = insight.whyImportant || 'Este tramo tiene peso narrativo y conviene reforzarlo visualmente.';
 
     const impact = document.createElement('div');
     impact.className = 'insight-impact';
-    impact.textContent = `Resultado esperado: ${insight.expectedImpact || 'mejor claridad y retencion en este tramo.'}`;
+    impact.textContent = `Objetivo visual: ${insight.expectedImpact || 'Aumentar claridad y retención en este tramo.'}`;
 
     const anim = document.createElement('div');
     anim.className = 'insight-anim';
-    anim.textContent = `Animacion sugerida: ${insight.animationDescription || 'refuerzo visual de apoyo.'}`;
+    anim.textContent = `Primera propuesta: ${insight.animationDescription || 'Animación contextual personalizada para este momento.'}`;
 
     card.appendChild(time);
     card.appendChild(topic);
@@ -1212,7 +1212,7 @@ const renderInsights = (job) => {
     card.appendChild(anim);
 
     insightsList.appendChild(card);
-  }
+  });
 };
 
 const resetWorkspace = () => {
