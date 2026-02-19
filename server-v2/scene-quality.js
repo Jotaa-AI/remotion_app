@@ -53,26 +53,6 @@ const alignSceneDurationToSpeech = ({scene, words = [], durationSec = 0}) => {
   };
 };
 
-const scoreScene = (scene) => {
-  const layers = Array.isArray(scene?.layers) ? scene.layers : [];
-  const textLayers = layers.filter((l) => l.type === 'text');
-  const loopLayers = layers.filter((l) => l.loop);
-
-  let score = 1;
-
-  if (layers.length > 8) score -= 0.25;
-  if (textLayers.length > 3) score -= 0.2;
-  if (loopLayers.length > 2) score -= 0.2;
-
-  for (const layer of textLayers) {
-    if (String(layer?.text || '').length > 120) score -= 0.08;
-    if ((layer?.style?.fontSize || 0) < 24) score -= 0.08;
-    if ((layer?.style?.maxWidth || 1) > 0.9) score -= 0.05;
-  }
-
-  return clamp(Number(score.toFixed(3)), 0, 1);
-};
-
 const antiClutterScene = (scene) => {
   const layers = Array.isArray(scene?.layers) ? scene.layers : [];
 
@@ -108,6 +88,75 @@ const antiClutterScene = (scene) => {
   };
 };
 
+const scoreScene = (scene, index, allScenes) => {
+  const layers = Array.isArray(scene?.layers) ? scene.layers : [];
+  const textLayers = layers.filter((l) => l.type === 'text');
+  const shapeLayers = layers.filter((l) => l.type === 'shape');
+  const metricLayers = layers.filter((l) => l.type === 'metric');
+  const loopLayers = layers.filter((l) => l.loop);
+
+  let score = 1;
+
+  if (layers.length > 8) score -= 0.25;
+  if (textLayers.length > 3) score -= 0.18;
+  if (loopLayers.length > 2) score -= 0.16;
+
+  const hasRationale = String(scene?.rationale || '').trim().length >= 16;
+  if (!hasRationale) score -= 0.08;
+
+  for (const layer of textLayers) {
+    const textSize = String(layer?.text || '').trim().length;
+    if (textSize > 120) score -= 0.08;
+    if ((layer?.style?.fontSize || 0) < 26) score -= 0.08;
+    if ((layer?.style?.maxWidth || 1) > 0.9) score -= 0.05;
+  }
+
+  if (scene.intent === 'proof' && metricLayers.length === 0) {
+    score -= 0.15;
+  }
+
+  if (scene.intent === 'cta') {
+    const hasCtaText = textLayers.some((l) => /actúa|ahora|reserva|llama|empieza|haz/i.test(String(l.text || '')));
+    if (!hasCtaText) score -= 0.1;
+  }
+
+  const fingerprint = JSON.stringify(
+    layers.map((layer) => ({
+      t: layer.type,
+      s: layer.shape || null,
+      x: layer.style?.x || 0,
+      y: layer.style?.y || 0,
+      w: layer.style?.w || 0,
+      h: layer.style?.h || 0,
+    })),
+  );
+
+  const duplicates = allScenes
+    .slice(0, index)
+    .filter((other) =>
+      JSON.stringify(
+        (other.layers || []).map((layer) => ({
+          t: layer.type,
+          s: layer.shape || null,
+          x: layer.style?.x || 0,
+          y: layer.style?.y || 0,
+          w: layer.style?.w || 0,
+          h: layer.style?.h || 0,
+        })),
+      ) === fingerprint,
+    ).length;
+
+  if (duplicates > 0) {
+    score -= Math.min(0.2, duplicates * 0.08);
+  }
+
+  if (shapeLayers.length === 0 && metricLayers.length === 0) {
+    score -= 0.08;
+  }
+
+  return clamp(Number(score.toFixed(3)), 0, 1);
+};
+
 export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvents = [], words = []}) => {
   const warnings = [];
 
@@ -125,16 +174,18 @@ export const validateAndOptimizeScenes = ({scenePlan, durationSec, fallbackEvent
     .map((scene) => antiClutterScene(scene))
     .map((scene) => alignSceneDurationToSpeech({scene, words, durationSec}));
 
-  const scores = optimizedScenes.map((scene) => ({
+  const scores = optimizedScenes.map((scene, index) => ({
     sceneId: scene.id,
-    score: scoreScene(scene),
+    intent: scene.intent,
+    score: scoreScene(scene, index, optimizedScenes),
     layerCount: scene.layers.length,
+    rationale: scene.rationale || null,
   }));
 
   const avgScore = scores.length > 0 ? scores.reduce((acc, s) => acc + s.score, 0) / scores.length : 0;
 
   let finalScenes = optimizedScenes;
-  if (avgScore < 0.55 && Array.isArray(fallbackEvents) && fallbackEvents.length > 0) {
+  if (avgScore < 0.62 && Array.isArray(fallbackEvents) && fallbackEvents.length > 0) {
     warnings.push('scene-plan-low-quality-fallback');
     const fallbackScenes = eventsToScenes({events: fallbackEvents});
     finalScenes = compileScenePlan({plan: {scenes: fallbackScenes}, durationSec}).scenes

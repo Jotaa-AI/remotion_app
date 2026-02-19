@@ -83,19 +83,20 @@ const applyAnimStyle = ({anim, progress, baseStyle = {}, mode}) => {
   return current;
 };
 
-const applyLoopStyle = ({anim, frame, fps, baseStyle}) => {
+const applyLoopStyle = ({anim, frame, fps, baseStyle, energy = 'balanced'}) => {
   if (!anim) return baseStyle;
   const pulseHz = Number(anim.params?.hz || 1.1);
   const amp = Number(anim.params?.amp || 0.04);
-  const wave = Math.sin((frame / fps) * Math.PI * 2 * pulseHz);
-  const scale = 1 + wave * amp;
+  const energyFactor = energy === 'high' ? 1.2 : energy === 'calm' ? 0.8 : 1;
+  const wave = Math.sin((frame / fps) * Math.PI * 2 * pulseHz * energyFactor);
+  const scale = 1 + wave * amp * energyFactor;
   return {
     ...baseStyle,
     transform: `${baseStyle.transform || ''} scale(${scale.toFixed(3)})`.trim(),
   };
 };
 
-const Layer = ({layer, stylePack}) => {
+const Layer = ({layer, stylePack, sceneEnergy}) => {
   const frame = useCurrentFrame();
   const {fps, width, height, durationInFrames} = useVideoConfig();
   const s = layer.style || {};
@@ -162,7 +163,7 @@ const Layer = ({layer, stylePack}) => {
 
   let finalStyle = content?.props?.style || {};
   finalStyle = applyAnimStyle({anim: layer.enter, progress: enter, baseStyle: finalStyle, mode: 'enter'});
-  finalStyle = applyLoopStyle({anim: layer.loop, frame, fps, baseStyle: finalStyle});
+  finalStyle = applyLoopStyle({anim: layer.loop, frame, fps, baseStyle: finalStyle, energy: sceneEnergy});
   finalStyle = applyAnimStyle({anim: layer.exit, progress: exit, baseStyle: finalStyle, mode: 'exit'});
 
   return React.cloneElement(content, {style: finalStyle});
@@ -172,7 +173,7 @@ export const PrimitiveRenderer = ({scene}) => {
   return (
     <AbsoluteFill style={{pointerEvents: 'none'}}>
       {scene.layers.map((layer) => (
-        <Layer key={layer.id} layer={layer} stylePack={scene.stylePack} />
+        <Layer key={layer.id} layer={layer} stylePack={scene.stylePack} sceneEnergy={scene.energy || 'balanced'} />
       ))}
     </AbsoluteFill>
   );

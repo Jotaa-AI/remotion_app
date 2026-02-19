@@ -84,6 +84,8 @@ export const SceneSchema = z
     durationSec: z.number().min(0.4).max(20),
     intent: z.enum(['hook', 'proof', 'explanation', 'objection', 'cta', 'transition', 'summary']).default('explanation'),
     stylePack: z.enum(['clean', 'comic-blue', 'retro-red']).default('clean'),
+    energy: z.enum(['calm', 'balanced', 'high']).default('balanced'),
+    rationale: z.string().min(1).max(220).optional(),
     layers: z.array(LayerSchema).min(1).max(20),
   })
   .strict();
