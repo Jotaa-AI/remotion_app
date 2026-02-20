@@ -246,7 +246,57 @@ const getErrorMessage = (error) => {
   return String(error);
 };
 
+const transcribeWithWorker = async ({videoPath, brief, durationSec}) => {
+  if (!config.transcribeWorkerUrl) {
+    return null;
+  }
+
+  const response = await fetch(`${config.transcribeWorkerUrl.replace(/\/$/, '')}/transcribe`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(config.transcribeWorkerToken ? {Authorization: `Bearer ${config.transcribeWorkerToken}`} : {}),
+    },
+    body: JSON.stringify({
+      videoPath,
+      brief,
+      durationSec,
+    }),
+  });
+
+  if (!response.ok) {
+    const txt = await response.text().catch(() => '');
+    throw new Error(`Worker transcribe HTTP ${response.status}: ${txt || 'request failed'}`);
+  }
+
+  const data = await response.json();
+  if (!data?.text || !Array.isArray(data?.words)) {
+    throw new Error('Worker devolvió una transcripción inválida.');
+  }
+
+  return {
+    text: data.text,
+    words: data.words,
+    source: data.source || 'worker',
+    warning: data.warning || null,
+  };
+};
+
 export const transcribeVideo = async ({videoPath, brief, durationSec}) => {
+  try {
+    const workerTranscript = await transcribeWithWorker({videoPath, brief, durationSec});
+    if (workerTranscript) {
+      return workerTranscript;
+    }
+  } catch (workerError) {
+    if (!hasOpenAi) {
+      return {
+        ...mockTranscript({brief, durationSec}),
+        warning: `Falló worker de transcripción: ${getErrorMessage(workerError)}`,
+      };
+    }
+  }
+
   if (!hasOpenAi) {
     return {
       ...mockTranscript({brief, durationSec}),

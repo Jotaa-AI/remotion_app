@@ -31,4 +31,6 @@ export const config = {
   jobsDir: path.join(DATA_DIR, 'jobs'),
   remotionEntry: path.join(ROOT_DIR, 'remotion', 'index.jsx'),
   useSceneGraph: String(process.env.USE_SCENE_GRAPH || 'false').toLowerCase() === 'true',
+  transcribeWorkerUrl: process.env.TRANSCRIBE_WORKER_URL || '',
+  transcribeWorkerToken: process.env.TRANSCRIBE_WORKER_TOKEN || '',
 };

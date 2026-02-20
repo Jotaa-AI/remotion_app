@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node server/index.js",
     "dev:watch": "node --watch server/index.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "worker:transcribe": "TRANSCRIBE_WORKER_URL= node worker/transcribe-worker.js"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
