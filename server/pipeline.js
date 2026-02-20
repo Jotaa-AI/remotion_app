@@ -82,7 +82,7 @@ const ensureMetadata = async (jobId, job) => {
   }
 
   const metadata = await getVideoMetadata(job.input.path);
-  if (metadata.warning) {
+  if (metadata.warning && !/ffprobe ENOENT/i.test(metadata.warning)) {
     await updateJob(jobId, {warnings: [metadata.warning]});
   }
 

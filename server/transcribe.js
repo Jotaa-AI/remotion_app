@@ -32,6 +32,37 @@ const createTempAudioPath = (suffix = '.mp3') => {
   return path.join(config.uploadsDir, `.transcribe-${token}${suffix}`);
 };
 
+const isHttpUrl = (value) => {
+  try {
+    const parsed = new URL(String(value || ''));
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+const materializeVideoPath = async (videoPath) => {
+  if (!isHttpUrl(videoPath)) {
+    return {localPath: videoPath, cleanup: async () => undefined};
+  }
+
+  const tempVideoPath = createTempAudioPath('.source.mp4');
+  const response = await fetch(videoPath);
+  if (!response.ok || !response.body) {
+    throw new Error(`No se pudo descargar el video remoto para transcribir (HTTP ${response.status}).`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  await fsPromises.writeFile(tempVideoPath, buffer);
+
+  return {
+    localPath: tempVideoPath,
+    cleanup: async () => {
+      await fsPromises.unlink(tempVideoPath).catch(() => undefined);
+    },
+  };
+};
+
 const extractAudio = async ({videoPath, outputPath, startSec, durationSec}) => {
   const args = ['-y'];
 
@@ -182,21 +213,27 @@ const transcribeWithPreparedAudio = async ({videoPath, durationSec, prompt}) => 
 };
 
 const transcribeRawVideo = async ({videoPath, prompt}) => {
-  const response = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(videoPath),
-    model: config.transcribeModel,
-    response_format: 'verbose_json',
-    timestamp_granularities: ['word'],
-    language: 'es',
-    temperature: 0,
-    prompt,
-  });
+  const prepared = await materializeVideoPath(videoPath);
 
-  return {
-    text: (response.text || '').trim(),
-    words: mapTranscriptWords(response.words, 0),
-    source: 'openai-es-raw',
-  };
+  try {
+    const response = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(prepared.localPath),
+      model: config.transcribeModel,
+      response_format: 'verbose_json',
+      timestamp_granularities: ['word'],
+      language: 'es',
+      temperature: 0,
+      prompt,
+    });
+
+    return {
+      text: (response.text || '').trim(),
+      words: mapTranscriptWords(response.words, 0),
+      source: 'openai-es-raw',
+    };
+  } finally {
+    await prepared.cleanup();
+  }
 };
 
 const getErrorMessage = (error) => {
