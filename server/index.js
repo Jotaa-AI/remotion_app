@@ -377,7 +377,7 @@ app.post('/api/blob/upload', async (req, res) => {
   }
 });
 
-app.post('/api/jobs', upload.single('video'), (req, res) => {
+app.post('/api/jobs', upload.single('video'), async (req, res) => {
   const youtubeUrl = toStringOrNull(req.body?.youtubeUrl);
   const blobUrl = toStringOrNull(req.body?.blobUrl);
   const hasFile = Boolean(req.file);
@@ -399,24 +399,30 @@ app.post('/api/jobs', upload.single('video'), (req, res) => {
     return;
   }
 
-  const job = hasFile
-    ? createJob({file: req.file})
-    : createJob({
-        sourceUrl: hasBlob ? blobUrl : youtubeUrl,
-        sourceType: hasBlob ? 'blob' : 'youtube',
-      });
-  enqueueAnalysis(job.id);
+  try {
+    const job = hasFile
+      ? await createJob({file: req.file})
+      : await createJob({
+          sourceUrl: hasBlob ? blobUrl : youtubeUrl,
+          sourceType: hasBlob ? 'blob' : 'youtube',
+        });
+    enqueueAnalysis(job.id);
 
-  res.status(202).json({
-    jobId: job.id,
-    status: 'queued',
-    stage: 'analyze-queued',
-    progress: 0,
-  });
+    res.status(202).json({
+      jobId: job.id,
+      status: 'queued',
+      stage: 'analyze-queued',
+      progress: 0,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: `No se pudo crear el job persistente: ${error.message}`,
+    });
+  }
 });
 
 app.post('/api/jobs/:id/refine', async (req, res) => {
-  const job = getJob(req.params.id);
+  const job = await getJob(req.params.id);
   if (!job) {
     res.status(404).json({error: 'Job no encontrado.'});
     return;
@@ -433,7 +439,7 @@ app.post('/api/jobs/:id/refine', async (req, res) => {
     return;
   }
 
-  updateJob(job.id, {
+  await updateJob(job.id, {
     status: 'review',
     stage: 'refining-overlays',
     error: null,
@@ -465,8 +471,8 @@ app.post('/api/jobs/:id/refine', async (req, res) => {
       };
     }
 
-    const refreshed = getJob(job.id);
-    const updated = updateJob(job.id, {
+    const refreshed = await getJob(job.id);
+    const updated = await updateJob(job.id, {
       status: 'review',
       stage: 'review-ready',
       overlayPlan: nextOverlayPlan,
@@ -483,7 +489,7 @@ app.post('/api/jobs/:id/refine', async (req, res) => {
 
     res.json(serializeJob(updated));
   } catch (error) {
-    const updated = updateJob(job.id, {
+    const updated = await updateJob(job.id, {
       status: 'review',
       stage: 'review-ready',
       error: error.message,
@@ -496,8 +502,8 @@ app.post('/api/jobs/:id/refine', async (req, res) => {
   }
 });
 
-app.post('/api/jobs/:id/visual-overrides', (req, res) => {
-  const job = getJob(req.params.id);
+app.post('/api/jobs/:id/visual-overrides', async (req, res) => {
+  const job = await getJob(req.params.id);
   if (!job) {
     res.status(404).json({error: 'Job no encontrado.'});
     return;
@@ -683,8 +689,8 @@ app.post('/api/jobs/:id/visual-overrides', (req, res) => {
     durationSec: job.video.durationSec,
   });
 
-  const refreshed = getJob(job.id);
-  const updated = updateJob(job.id, {
+  const refreshed = await getJob(job.id);
+  const updated = await updateJob(job.id, {
     status: 'review',
     stage: 'review-ready',
     overlayPlan: normalizedEvents,
@@ -701,8 +707,8 @@ app.post('/api/jobs/:id/visual-overrides', (req, res) => {
   res.json(serializeJob(updated));
 });
 
-app.post('/api/jobs/:id/review/advance', (req, res) => {
-  const job = getJob(req.params.id);
+app.post('/api/jobs/:id/review/advance', async (req, res) => {
+  const job = await getJob(req.params.id);
   if (!job) {
     res.status(404).json({error: 'Job no encontrado.'});
     return;
@@ -745,7 +751,7 @@ app.post('/api/jobs/:id/review/advance', (req, res) => {
   const nextIndex = Math.min(currentIndex + 1, job.overlayPlan.length);
   const completed = nextIndex >= job.overlayPlan.length;
 
-  const updated = updateJob(job.id, {
+  const updated = await updateJob(job.id, {
     status: 'review',
     stage: completed ? 'review-ready' : 'review-ready',
     reviewState: {
@@ -760,8 +766,8 @@ app.post('/api/jobs/:id/review/advance', (req, res) => {
   res.json(serializeJob(updated));
 });
 
-app.post('/api/jobs/:id/render', (req, res) => {
-  const job = getJob(req.params.id);
+app.post('/api/jobs/:id/render', async (req, res) => {
+  const job = await getJob(req.params.id);
   if (!job) {
     res.status(404).json({error: 'Job no encontrado.'});
     return;
@@ -781,7 +787,7 @@ app.post('/api/jobs/:id/render', (req, res) => {
   }
 
   if (approvedOverlays.length > 0) {
-    updateJob(job.id, {
+    await updateJob(job.id, {
       overlayPlan: approvedOverlays,
       scenePlan: eventsToScenes({events: approvedOverlays}),
     });
@@ -793,13 +799,13 @@ app.post('/api/jobs/:id/render', (req, res) => {
   }
 
   enqueueRender(job.id);
-  const queued = getJob(job.id);
+  const queued = await getJob(job.id);
 
   res.status(202).json(serializeJob(queued));
 });
 
-app.get('/api/jobs/:id', (req, res) => {
-  const job = getJob(req.params.id);
+app.get('/api/jobs/:id', async (req, res) => {
+  const job = await getJob(req.params.id);
   if (!job) {
     res.status(404).json({error: 'Job no encontrado.'});
     return;

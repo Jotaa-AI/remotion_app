@@ -7,7 +7,7 @@ import {buildExhaustiveAnalysisInsights} from './exhaustive-analysis.js';
 import {planOverlayEvents} from './plan-overlays.js';
 import {normalizeEvents} from './normalize-events.js';
 import {renderCompositedVideo} from './remotion-render.js';
-import {downloadRemoteVideo, downloadYoutubeVideo} from './video-ingest.js';
+import {downloadYoutubeVideo} from './video-ingest.js';
 import {planSceneGraph} from '../server-v2/plan-scenes.js';
 import {validateAndOptimizeScenes} from '../server-v2/scene-quality.js';
 
@@ -20,7 +20,6 @@ const ensureInputReady = async (jobId, job) => {
   }
 
   if ((job.input?.sourceType === 'youtube' || job.input?.sourceType === 'blob') && job.input?.sourceUrl) {
-    // Para Blob en cloud, evitamos descargar de nuevo para no bloquear en serverless.
     if (job.input.sourceType === 'blob') {
       const filenameFromUrl = (() => {
         try {
@@ -41,7 +40,7 @@ const ensureInputReady = async (jobId, job) => {
         isRemote: true,
       };
 
-      updateJob(jobId, {
+      await updateJob(jobId, {
         stage: 'input-download',
         progress: 6,
         input,
@@ -50,7 +49,7 @@ const ensureInputReady = async (jobId, job) => {
       return input;
     }
 
-    updateJob(jobId, {
+    await updateJob(jobId, {
       stage: 'input-download',
       progress: 6,
     });
@@ -66,7 +65,7 @@ const ensureInputReady = async (jobId, job) => {
       sourceType: job.input.sourceType,
     };
 
-    updateJob(jobId, {input});
+    await updateJob(jobId, {input});
     return input;
   }
 
@@ -84,20 +83,18 @@ const ensureMetadata = async (jobId, job) => {
 
   const metadata = await getVideoMetadata(job.input.path);
   if (metadata.warning) {
-    updateJob(jobId, {warnings: [metadata.warning]});
+    await updateJob(jobId, {warnings: [metadata.warning]});
   }
 
-  updateJob(jobId, {video: metadata});
+  await updateJob(jobId, {video: metadata});
   return metadata;
 };
 
 const analyzeJob = async (jobId) => {
-  let job = getJob(jobId);
-  if (!job) {
-    return;
-  }
+  let job = await getJob(jobId);
+  if (!job) return;
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'analyzing',
     stage: 'video-metadata',
     progress: 10,
@@ -106,18 +103,13 @@ const analyzeJob = async (jobId) => {
   });
 
   const resolvedInput = await ensureInputReady(jobId, job);
-  job = getJob(jobId);
-  if (!job) {
-    return;
-  }
-  job = {
-    ...job,
-    input: resolvedInput,
-  };
+  job = await getJob(jobId);
+  if (!job) return;
 
+  job = {...job, input: resolvedInput};
   const metadata = await ensureMetadata(jobId, job);
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'analyzing',
     stage: 'transcription',
     progress: 32,
@@ -130,20 +122,17 @@ const analyzeJob = async (jobId) => {
     durationSec: metadata.durationSec,
   });
 
-  const transcriptPreview = transcript.text.slice(0, 500);
-  const transcriptWarnings = transcript.warning ? [transcript.warning] : [];
-
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'analyzing',
     stage: 'insight-extraction',
     progress: 58,
     transcript: {
       text: transcript.text,
-      preview: transcriptPreview,
+      preview: transcript.text.slice(0, 500),
       words: transcript.words,
       source: transcript.source,
     },
-    warnings: transcriptWarnings,
+    warnings: transcript.warning ? [transcript.warning] : [],
   });
 
   const insights = await buildExhaustiveAnalysisInsights({
@@ -153,7 +142,7 @@ const analyzeJob = async (jobId) => {
     durationSec: metadata.durationSec,
   });
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'analyzing',
     stage: 'planning-overlays',
     progress: 72,
@@ -173,7 +162,7 @@ const analyzeJob = async (jobId) => {
     durationSec: metadata.durationSec,
   });
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'analyzing',
     stage: 'planning-scenes',
     progress: 88,
@@ -194,7 +183,7 @@ const analyzeJob = async (jobId) => {
     words: transcript.words,
   });
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'review',
     stage: 'review-ready',
     progress: 100,
@@ -214,10 +203,8 @@ const analyzeJob = async (jobId) => {
 };
 
 const renderJob = async (jobId) => {
-  let job = getJob(jobId);
-  if (!job) {
-    return;
-  }
+  let job = await getJob(jobId);
+  if (!job) return;
 
   const hasOverlayPlan = Array.isArray(job.overlayPlan) && job.overlayPlan.length > 0;
   const hasScenePlan = Array.isArray(job.scenePlan) && job.scenePlan.length > 0;
@@ -230,7 +217,7 @@ const renderJob = async (jobId) => {
     );
   }
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'rendering',
     stage: 'rendering',
     progress: 10,
@@ -238,14 +225,9 @@ const renderJob = async (jobId) => {
   });
 
   const resolvedInput = await ensureInputReady(jobId, job);
-  job = getJob(jobId);
-  if (!job) {
-    return;
-  }
-  job = {
-    ...job,
-    input: resolvedInput,
-  };
+  job = await getJob(jobId);
+  if (!job) return;
+  job = {...job, input: resolvedInput};
 
   const metadata = await ensureMetadata(jobId, job);
 
@@ -264,11 +246,9 @@ const renderJob = async (jobId) => {
     events: job.overlayPlan,
     scenes: job.scenePlan,
     onRenderProgress: (progress) => {
-      if (!Number.isFinite(progress)) {
-        return;
-      }
+      if (!Number.isFinite(progress)) return;
       const pct = 10 + Math.round(progress * 85);
-      updateJob(jobId, {
+      void updateJob(jobId, {
         stage: 'rendering',
         progress: Math.min(95, pct),
       });
@@ -277,7 +257,7 @@ const renderJob = async (jobId) => {
 
   const outputFilename = path.basename(outputPath);
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: 'completed',
     stage: 'completed',
     progress: 100,
@@ -304,10 +284,7 @@ const processTask = async (task) => {
 };
 
 const workQueue = async () => {
-  if (isProcessing) {
-    return;
-  }
-
+  if (isProcessing) return;
   isProcessing = true;
 
   while (queue.length > 0) {
@@ -317,13 +294,13 @@ const workQueue = async () => {
       await processTask(task);
     } catch (error) {
       if (task.type === 'render') {
-        updateJob(task.jobId, {
+        await updateJob(task.jobId, {
           status: 'review',
           stage: 'render-failed',
           error: error.message,
         });
       } else {
-        updateJob(task.jobId, {
+        await updateJob(task.jobId, {
           status: 'failed',
           stage: 'failed',
           progress: 100,
@@ -337,7 +314,7 @@ const workQueue = async () => {
 };
 
 export const enqueueAnalysis = (jobId) => {
-  updateJob(jobId, {
+  void updateJob(jobId, {
     status: 'queued',
     stage: 'analyze-queued',
     progress: 0,
@@ -345,11 +322,11 @@ export const enqueueAnalysis = (jobId) => {
   });
 
   queue.push({jobId, type: 'analyze'});
-  workQueue();
+  void workQueue();
 };
 
 export const enqueueRender = (jobId) => {
-  updateJob(jobId, {
+  void updateJob(jobId, {
     status: 'queued',
     stage: 'render-queued',
     progress: 0,
@@ -357,5 +334,5 @@ export const enqueueRender = (jobId) => {
   });
 
   queue.push({jobId, type: 'render'});
-  workQueue();
+  void workQueue();
 };
