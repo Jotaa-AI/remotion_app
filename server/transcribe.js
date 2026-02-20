@@ -45,7 +45,15 @@ const extractAudio = async ({videoPath, outputPath, startSec, durationSec}) => {
     args.push('-t', String(durationSec));
   }
 
-  args.push('-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', outputPath);
+  // Cadena de limpieza para priorizar voz en español:
+  // - downmix a mono
+  // - filtrar graves y agudos extremos
+  // - normalizar sonoridad
+  // - compresión suave para inteligibilidad
+  const voiceFilter =
+    'highpass=f=90,lowpass=f=7000,loudnorm=I=-16:LRA=11:TP=-1.5,acompressor=threshold=-18dB:ratio=2.5:attack=20:release=250:makeup=3';
+
+  args.push('-vn', '-ac', '1', '-ar', '16000', '-af', voiceFilter, '-c:a', 'libmp3lame', '-b:a', '48k', outputPath);
 
   await runCommand('ffmpeg', args);
 };
@@ -58,13 +66,18 @@ const mapTranscriptWords = (rawWords, offsetSec) => {
   }));
 };
 
-const transcribeAudioFile = async ({audioPath, offsetSec = 0}) => {
-  const response = await openai.audio.transcriptions.create({
-    file: fs.createReadStream(audioPath),
-    model: config.transcribeModel,
-    response_format: 'verbose_json',
-    timestamp_granularities: ['word'],
-  });
+const buildTranscriptionParams = ({audioPath, prompt}) => ({
+  file: fs.createReadStream(audioPath),
+  model: config.transcribeModel,
+  response_format: 'verbose_json',
+  timestamp_granularities: ['word'],
+  language: 'es',
+  temperature: 0,
+  prompt,
+});
+
+const transcribeAudioFile = async ({audioPath, offsetSec = 0, prompt = ''}) => {
+  const response = await openai.audio.transcriptions.create(buildTranscriptionParams({audioPath, prompt}));
 
   return {
     text: (response.text || '').trim(),
@@ -72,7 +85,7 @@ const transcribeAudioFile = async ({audioPath, offsetSec = 0}) => {
   };
 };
 
-const transcribeWithPreparedAudio = async ({videoPath, durationSec}) => {
+const transcribeWithPreparedAudio = async ({videoPath, durationSec, prompt}) => {
   const filesToCleanup = [];
 
   try {
@@ -84,15 +97,16 @@ const transcribeWithPreparedAudio = async ({videoPath, durationSec}) => {
     if (fullAudioStats.size <= config.transcribeMaxBytes) {
       const transcript = await transcribeAudioFile({
         audioPath: fullAudioPath,
+        prompt,
       });
 
       return {
         ...transcript,
-        source: 'openai',
+        source: 'openai-es',
       };
     }
 
-    const chunkSeconds = Math.max(120, config.transcribeChunkSeconds);
+    const chunkSeconds = Math.max(90, config.transcribeChunkSeconds || 120);
     const mergedWords = [];
     const mergedText = [];
 
@@ -110,14 +124,37 @@ const transcribeWithPreparedAudio = async ({videoPath, durationSec}) => {
 
       const chunkStats = await fsPromises.stat(chunkPath);
       if (chunkStats.size > config.transcribeMaxBytes) {
-        throw new Error(
-          `Segmento de audio (${Math.floor(cursor)}s - ${Math.floor(cursor + segmentDuration)}s) excede el límite de ${config.transcribeMaxBytes} bytes para OpenAI.`,
-        );
+        // Si un chunk sigue siendo grande, lo partimos en microchunks para no perder el tramo.
+        const microSeconds = 45;
+        for (let micro = cursor; micro < cursor + segmentDuration; micro += microSeconds) {
+          const microDuration = Math.min(microSeconds, cursor + segmentDuration - micro);
+          const microPath = createTempAudioPath(`.micro-${Math.floor(micro)}.mp3`);
+          filesToCleanup.push(microPath);
+
+          await extractAudio({
+            videoPath,
+            outputPath: microPath,
+            startSec: micro,
+            durationSec: microDuration,
+          });
+
+          const microTranscript = await transcribeAudioFile({
+            audioPath: microPath,
+            offsetSec: micro,
+            prompt,
+          });
+
+          if (microTranscript.text) mergedText.push(microTranscript.text);
+          if (microTranscript.words.length > 0) mergedWords.push(...microTranscript.words);
+        }
+
+        continue;
       }
 
       const segmentTranscript = await transcribeAudioFile({
         audioPath: chunkPath,
         offsetSec: cursor,
+        prompt,
       });
 
       if (segmentTranscript.text) {
@@ -131,7 +168,7 @@ const transcribeWithPreparedAudio = async ({videoPath, durationSec}) => {
     return {
       text: mergedText.join(' ').trim(),
       words: mergedWords,
-      source: 'openai-chunked',
+      source: 'openai-es-chunked',
     };
   } finally {
     await Promise.all(
@@ -144,18 +181,21 @@ const transcribeWithPreparedAudio = async ({videoPath, durationSec}) => {
   }
 };
 
-const transcribeRawVideo = async ({videoPath}) => {
+const transcribeRawVideo = async ({videoPath, prompt}) => {
   const response = await openai.audio.transcriptions.create({
     file: fs.createReadStream(videoPath),
     model: config.transcribeModel,
     response_format: 'verbose_json',
     timestamp_granularities: ['word'],
+    language: 'es',
+    temperature: 0,
+    prompt,
   });
 
   return {
     text: (response.text || '').trim(),
     words: mapTranscriptWords(response.words, 0),
-    source: 'openai-raw',
+    source: 'openai-es-raw',
   };
 };
 
@@ -171,19 +211,42 @@ const getErrorMessage = (error) => {
 
 export const transcribeVideo = async ({videoPath, brief, durationSec}) => {
   if (!hasOpenAi) {
-    return mockTranscript({brief, durationSec});
+    return {
+      ...mockTranscript({brief, durationSec}),
+      warning: 'No hay API key de OpenAI. Se usó transcripción de respaldo.',
+    };
   }
 
+  const prompt = [
+    'Transcribe en español neutro.',
+    'No traduzcas ni inventes contenido.',
+    'Mantén nombres propios y tecnicismos tal como se pronuncien.',
+    brief ? `Contexto del video: ${String(brief).slice(0, 300)}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   try {
-    return await transcribeWithPreparedAudio({videoPath, durationSec});
+    const transcript = await transcribeWithPreparedAudio({videoPath, durationSec, prompt});
+    if (!transcript.text) {
+      throw new Error('La transcripción llegó vacía.');
+    }
+    return transcript;
   } catch (error) {
     try {
-      return await transcribeRawVideo({videoPath});
+      const raw = await transcribeRawVideo({videoPath, prompt});
+      if (!raw.text) {
+        throw new Error('La transcripción raw llegó vacía.');
+      }
+      return {
+        ...raw,
+        warning: `Se usó ruta alternativa de transcripción por audio preparado fallido: ${getErrorMessage(error)}`,
+      };
     } catch (secondError) {
       const fallback = mockTranscript({brief, durationSec});
       return {
         ...fallback,
-        warning: `Falló transcripción OpenAI: ${getErrorMessage(error)}. Intento alternativo: ${getErrorMessage(secondError)}`,
+        warning: `Falló transcripción OpenAI. Error principal: ${getErrorMessage(error)}. Alternativo: ${getErrorMessage(secondError)}.`,
       };
     }
   }
